@@ -442,18 +442,26 @@ export default function App() {
         });
     };
 
+    const isHostRef = useRef(false);
+
+    const applyState = (next: GameState) => {
+        setGameState(prev => {
+            if (prev?.phase !== next.phase) { setSnoopResult(null); setActionTargeting(null); }
+            return next;
+        });
+        isHostRef.current = next.players.find(p => p.id === playerId)?.isHost ?? false;
+    };
+
     useEffect(() => {
         if (!roomIdRef.current) return;
         const interval = setInterval(async () => {
             try {
-                const res = await api.getState(roomIdRef.current!);
-                if (res) {
-                    handleMessages(res.messages ?? []);
-                    setGameState(prev => {
-                        const next = res.state;
-                        if (prev?.phase !== next.phase) { setSnoopResult(null); setActionTargeting(null); }
-                        return next;
-                    });
+                if (isHostRef.current && roomIdRef.current) {
+                    const res = await api.tick(roomIdRef.current);
+                    if (res) applyState(res.state);
+                } else {
+                    const res = await api.getState(roomIdRef.current!);
+                    if (res) { handleMessages(res.messages ?? []); applyState(res.state); }
                 }
             } catch {}
         }, 1000);
@@ -462,7 +470,9 @@ export default function App() {
 
     const action = (type: string, payload?: unknown) => {
         if (!roomIdRef.current) return;
-        api.action(roomIdRef.current, type, payload).catch(() => {});
+        api.action(roomIdRef.current, type, payload)
+            .then(res => { if (res?.state) applyState(res.state); })
+            .catch(() => {});
     };
 
     const handleRevealRole = () => action('reveal_role');
@@ -479,6 +489,7 @@ export default function App() {
         try {
             const state = await api.createRoom(nickname, selectedAvatar);
             roomIdRef.current = state.roomId;
+            isHostRef.current = true;
             setGameState(state);
         } catch (e: any) { setError(e.message); }
     };
@@ -488,6 +499,7 @@ export default function App() {
         try {
             const state = await api.joinRoom(roomIdInput, nickname, selectedAvatar);
             roomIdRef.current = state.roomId;
+            isHostRef.current = false;
             setGameState(state);
         } catch (e: any) { setError(e.message); }
     };
