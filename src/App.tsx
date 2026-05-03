@@ -43,6 +43,8 @@ import {
     ChevronRight
 } from 'lucide-react';
 
+import introAudio from './assets/audios/introducao.mp3';
+import interrogationAudio from './assets/audios/interrogatorio.mp3';
 import bibsAvatar from './assets/images/characters/bibs.png';
 import gbAvatar from './assets/images/characters/gb.png';
 import lavisAvatar from './assets/images/characters/lavis.png';
@@ -135,42 +137,83 @@ const Typewriter = ({text, delay = 50, onDone}: { text: string; delay?: number; 
     return <span>{currentText}</span>;
 };
 
+const INTRO_LINES: { text: string; start: number }[] = [
+    { text: "Bienvenidos a Blackwood Manor...", start: 0 },
+    { text: "Desafortunadamente, la noche dio un giro trágico.", start: 4.0 },
+    { text: "Ha ocurrido un asesinato en los pasillos sombríos", start: 9.0 },
+    { text: "y el culpable todavía camina entre nosotros.", start: 13.5 },
+    { text: "Nadie se irá hasta que se revele la verdad.", start: 17.0 },
+];
+
 const NarratorIntro = () => {
+    const [activeIdx, setActiveIdx] = useState(0);
     const [done, setDone] = useState(false);
-    const handleDone = React.useCallback(() => setDone(true), []);
+
+    useEffect(() => {
+        const audio = new Audio(introAudio);
+        audio.play().catch(() => {});
+
+        const onTime = () => {
+            const t = audio.currentTime;
+            let idx = 0;
+            for (let i = 0; i < INTRO_LINES.length; i++) {
+                if (t >= INTRO_LINES[i].start) idx = i;
+            }
+            setActiveIdx(idx);
+        };
+        const onEnd = () => setDone(true);
+        audio.addEventListener('timeupdate', onTime);
+        audio.addEventListener('ended', onEnd);
+
+        const fallback = setTimeout(() => setDone(true), 22000);
+
+        return () => {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.removeEventListener('timeupdate', onTime);
+            audio.removeEventListener('ended', onEnd);
+            clearTimeout(fallback);
+        };
+    }, []);
+
     return (
         <motion.div
             key="intro"
             initial={{opacity: 0}}
             animate={{opacity: 1}}
             exit={{opacity: 0}}
-            transition={{duration: 1}}
-            className="w-full max-w-2xl text-center flex flex-col items-center justify-center min-h-[400px] px-4"
+            transition={{duration: 1.5}}
+            className="w-full max-w-3xl text-center flex flex-col items-center justify-center min-h-[400px] px-4"
         >
             <MansionCard className="p-6 md:p-12 border-none bg-transparent">
                 <motion.div
                     initial={{scale: 0.8, opacity: 0}}
                     animate={{scale: 1, opacity: 1}}
-                    transition={{duration: 1, ease: "easeOut"}}
+                    transition={{duration: 1.5, ease: "easeOut"}}
                     className="mb-6 md:mb-8"
                 >
                     <Skull className="w-12 h-12 md:w-16 md:h-16 mx-auto text-white/20 mb-4"/>
                 </motion.div>
 
-                <div
-                    className="font-serif italic text-xl md:text-3xl leading-relaxed text-white/90 min-h-[200px] flex items-center justify-center px-2">
-                    <Typewriter
-                        text="Bienvenidos a la Mansión Blackwood... Desgraciadamente, la noche ha tomado un rumbo trágico. Un asesinato ha ocurrido en los oscuros pasillos, y el culpable aún camina entre nosotros. Nadie saldrá hasta que se revele la verdad."
-                        delay={50}
-                        onDone={handleDone}
-                    />
+                <div className="font-serif italic text-xl md:text-3xl leading-relaxed text-white/90 min-h-[220px] flex items-center justify-center px-2">
+                    <AnimatePresence mode="wait">
+                        <motion.p
+                            key={activeIdx}
+                            initial={{opacity: 0, y: 10}}
+                            animate={{opacity: 1, y: 0}}
+                            exit={{opacity: 0, y: -10}}
+                            transition={{duration: 0.8, ease: "easeOut"}}
+                        >
+                            {INTRO_LINES[activeIdx].text}
+                        </motion.p>
+                    </AnimatePresence>
                 </div>
 
                 {done && (
                     <motion.div
                         initial={{opacity: 0}}
                         animate={{opacity: 1}}
-                        transition={{duration: 0.6}}
+                        transition={{duration: 1.2}}
                         className="mt-8 md:mt-12 text-xs md:text-sm uppercase tracking-[0.4em] font-bold text-red-500 animate-pulse"
                     >
                         Preparaos
@@ -218,6 +261,53 @@ const RandomEventPopup = ({message}: { message: string }) => {
     );
 };
 
+const InterrogationIntro = ({timer}: { timer: number }) => {
+    useEffect(() => {
+        const audio = new Audio(interrogationAudio);
+        audio.play().catch(() => {});
+        return () => { audio.pause(); audio.currentTime = 0; };
+    }, []);
+
+    return (
+        <motion.div
+            key="interrogation-intro"
+            initial={{opacity: 0}}
+            animate={{opacity: 1}}
+            exit={{opacity: 0}}
+            transition={{duration: 1.2}}
+            className="fixed inset-0 z-[80] flex flex-col items-center justify-center bg-black gap-8 px-6"
+        >
+            <motion.div
+                initial={{scale: 0.8, opacity: 0}}
+                animate={{scale: 1, opacity: 1}}
+                transition={{duration: 1.5, ease: "easeOut"}}
+                className="text-center"
+            >
+                <MansionLabel className="mb-4 tracking-[0.6em] md:tracking-[1em] text-white/40 block">
+                    EL INTERROGATORIO
+                </MansionLabel>
+                <h2 className="text-4xl md:text-7xl font-serif italic text-white mb-4">
+                    Benoît Blanc llega...
+                </h2>
+                <p className="mt-6 text-sm md:text-base font-serif italic text-white/60 max-w-xl mx-auto leading-relaxed">
+                    "Cada uno tendrá su momento. Cada palabra será sopesada. La verdad siempre se filtra entre las grietas."
+                </p>
+                <div className="flex items-center justify-center gap-4 mt-12">
+                    <motion.div
+                        animate={{scaleX: [0, 1]}}
+                        transition={{duration: 18, ease: "linear"}}
+                        className="w-48 md:w-96 h-0.5 bg-red-500 origin-left"
+                    />
+                </div>
+            </motion.div>
+
+            <p className="text-xs text-red-500/50 uppercase font-black tracking-[0.4em] animate-pulse">
+                El primer sospechoso llega en {timer}s
+            </p>
+        </motion.div>
+    );
+};
+
 const InterrogationQuestionPopup = ({question, timer}: { question: string, timer: number }) => {
     return (
         <motion.div
@@ -255,7 +345,7 @@ const TransitionView = ({timer}: { timer: number }) => {
             <motion.div
                 initial={{scale: 0.8, opacity: 0}}
                 animate={{scale: 1, opacity: 1}}
-                transition={{duration: 1, ease: "easeOut"}}
+                transition={{duration: 2, ease: "easeOut"}}
                 className="text-center px-6"
             >
                 <MansionLabel className="mb-4 tracking-[0.6em] md:tracking-[1em] text-white/40 block">MOMENTO DEL
@@ -264,7 +354,7 @@ const TransitionView = ({timer}: { timer: number }) => {
                 <div className="flex items-center justify-center gap-4 mt-12">
                     <motion.div
                         animate={{scaleX: [0, 1]}}
-                        transition={{duration: 4, ease: "linear"}}
+                        transition={{duration: 8, ease: "linear"}}
                         className="w-48 md:w-96 h-0.5 bg-red-500 origin-left"
                     />
                 </div>
@@ -1042,13 +1132,15 @@ export default function App() {
                                                         />
                                                     </div>
 
-                                                    <MansionButton
-                                                        onClick={() => handleSecretAction(SecretActionType.SKIP)}
-                                                        variant="secondary"
-                                                        className="w-full max-w-[240px] text-[10px] py-4 mt-4"
-                                                    >
-                                                        {me.assignedSecretAction === SecretActionType.PLANT_EVIDENCE ? "NO INCRIMINAR AHORA" : "SALTAR ACCIÓN"}
-                                                    </MansionButton>
+                                                    {me.assignedSecretAction === SecretActionType.PLANT_EVIDENCE && (
+                                                        <MansionButton
+                                                            onClick={() => handleSecretAction(SecretActionType.SKIP)}
+                                                            variant="secondary"
+                                                            className="w-full max-w-[240px] text-[10px] py-4 mt-4"
+                                                        >
+                                                            NO INCRIMINAR AHORA
+                                                        </MansionButton>
+                                                    )}
 
                                                     <motion.p
                                                         initial={{opacity: 0}}
@@ -1083,6 +1175,11 @@ export default function App() {
                             </motion.div>
                         )}
                     </AnimatePresence>
+                )}
+
+                {/* INTERROGATION INTRO PHASE */}
+                {gameState.phase === GamePhase.INTERROGATION_INTRO && (
+                    <InterrogationIntro timer={gameState.timer}/>
                 )}
 
                 {/* INTERROGATION PHASE */}
@@ -1340,7 +1437,7 @@ export default function App() {
             {/* Item Display footer */}
             <div
                 className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-sm px-4 flex flex-col gap-2 pointer-events-none">
-                {me && gameState.phase !== GamePhase.TRANSITION && gameState.phase !== GamePhase.INTRO && gameState.phase !== GamePhase.GAME_OVER && (
+                {me && gameState.phase !== GamePhase.TRANSITION && gameState.phase !== GamePhase.INTRO && gameState.phase !== GamePhase.INTERROGATION_INTRO && gameState.phase !== GamePhase.GAME_OVER && (
                     <>
                         {me.logs && me.logs.length > 0 && (
                             <motion.div

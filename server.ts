@@ -13,7 +13,8 @@ const PORT = 3000;
 const GOSSIP_TIMER = 300; 
 const GOSSIP_VOTING_TIMER = 30;
 const REVEAL_TIMER = 10; // Reduzido para dar tempo de ler, mas ser rápido
-const INTRO_TIMER = 15;
+const INTRO_TIMER = 28;
+const INTERROGATION_INTRO_TIMER = 20;
 const VOTING_TIMER = 60;
 const RESULT_TIMER = 15;
 const AVATARS = ['bibs', 'gb', 'lavis', 'lucas', 'mat', 'mel', '🤵', '💃'];
@@ -343,18 +344,22 @@ async function startServer() {
             actor.logs.push(`Mezclaste los objetos de ${target1.nickname} y ${target2.nickname}`);
           }
           break;
-        case SecretActionType.ALIBI:
-          const alibiMsg = `Coartada confirmada: Tú y ${target1.nickname} estáis a salvo.`;
-          socket.emit("event_message", alibiMsg);
+        case SecretActionType.ALIBI: {
+          const actorMsg = `Coartada confirmada con ${target1.nickname}. Estáis a salvo.`;
+          const targetMsg = `${actor.nickname} confirmó una coartada contigo. Estáis a salvo.`;
+          socket.emit("event_message", actorMsg);
           if (!actor.logs) actor.logs = [];
-          actor.logs.push(alibiMsg);
+          actor.logs.push(actorMsg);
+          actor.notification = { message: actorMsg, type: 'swapped' };
           if (!target1.id.startsWith('bot_')) {
-            io.to(target1.id).emit("event_message", alibiMsg);
+            io.to(target1.id).emit("event_message", targetMsg);
             if (!target1.logs) target1.logs = [];
-            target1.logs.push(alibiMsg);
+            target1.logs.push(targetMsg);
+            target1.notification = { message: targetMsg, type: 'swapped' };
           }
           detail = `confirmed alibi with ${target1.nickname}`;
           break;
+        }
         case SecretActionType.PLANT_EVIDENCE:
           if (!actor.usedPlantEvidence && actor.hasKnife) {
             target1.isIncriminated = true;
@@ -375,6 +380,7 @@ async function startServer() {
           }
           break;
         case SecretActionType.SKIP:
+          if (actor.assignedSecretAction !== SecretActionType.PLANT_EVIDENCE) return;
           detail = `chose not to act now`;
           if (!actor.logs) actor.logs = [];
           actor.logs.push(`Decidiste no actuar en este momento.`);
@@ -693,7 +699,7 @@ async function startServer() {
         startPhase(room, GamePhase.VOTING, VOTING_TIMER);
       } else {
         room.interrogationIndex = 0;
-        startPhase(room, GamePhase.INTERROGATION, 6);
+        startPhase(room, GamePhase.INTERROGATION_INTRO, INTERROGATION_INTRO_TIMER);
       }
     }
   }
@@ -988,7 +994,7 @@ async function startServer() {
               startPhase(room, GamePhase.INTRO, INTRO_TIMER);
               break;
             case GamePhase.INTRO:
-              startPhase(room, GamePhase.TRANSITION, 4);
+              startPhase(room, GamePhase.TRANSITION, 8);
               break;
             case GamePhase.TRANSITION:
               startPhase(room, GamePhase.GOSSIP, GOSSIP_TIMER);
@@ -1001,6 +1007,9 @@ async function startServer() {
               } else {
                 processGossipQuestion(room);
               }
+              break;
+            case GamePhase.INTERROGATION_INTRO:
+              startPhase(room, GamePhase.INTERROGATION, 7);
               break;
             case GamePhase.INTERROGATION:
               if (room.isInterrogationQuestionWindow) {

@@ -10,6 +10,7 @@ export enum GamePhase {
   REVEAL = 'reveal',
   GOSSIP = 'gossip',
   GOSSIP_2 = 'gossip_2',
+  INTERROGATION_INTRO = 'interrogation_intro',
   INTERROGATION = 'interrogation',
   VOTING = 'voting',
   RESULT = 'result',
