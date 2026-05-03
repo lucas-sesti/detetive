@@ -1,5 +1,5 @@
-import React, {useState, useEffect, useMemo} from 'react';
-import {socket} from './lib/socket';
+import React, {useState, useEffect, useRef, useMemo} from 'react';
+import {api, getPlayerId} from './lib/api';
 import {
     GamePhase,
     Role,
@@ -394,7 +394,7 @@ const NotificationPopup = ({notification}: { notification: { message: string, ty
                     SEGURIDAD</MansionLabel>
                 <h2 className="text-2xl font-serif italic text-white mb-8">{notification.message}</h2>
                 <MansionButton
-                    onClick={() => socket.emit('clear_notification')}
+                    onClick={() => gameState && api.action(gameState.roomId, 'clear_notification')}
                     className="w-full"
                     variant="secondary"
                 >
@@ -417,126 +417,102 @@ export default function App() {
         type: SecretActionType,
         firstTargetId?: string
     } | null>(null);
+    const roomIdRef = useRef<string | null>(null);
+    const playerId = getPlayerId();
 
     const me = useMemo(() => {
-        return gameState?.players.find(p => p.id === socket.id);
-    }, [gameState]);
+        return gameState?.players.find(p => p.id === playerId);
+    }, [gameState, playerId]);
 
     const killers = useMemo(() => {
         return gameState?.players.filter(p => p.role === Role.KILLER) || [];
     }, [gameState]);
 
+    const handleMessages = (messages: { type: string; data: unknown }[]) => {
+        messages.forEach(msg => {
+            if (msg.type === 'event_message') {
+                setInfo(msg.data as string);
+                setTimeout(() => setInfo(null), 10000);
+            } else if (msg.type === 'snoop_result') {
+                setSnoopResult(msg.data as { targetId: string; item: Item });
+            } else if (msg.type === 'error') {
+                setError(msg.data as string);
+                setTimeout(() => setError(null), 3000);
+            }
+        });
+    };
+
     useEffect(() => {
-        socket.connect();
+        if (!roomIdRef.current) return;
+        const interval = setInterval(async () => {
+            try {
+                const res = await api.getState(roomIdRef.current!);
+                if (res) {
+                    handleMessages(res.messages ?? []);
+                    setGameState(prev => {
+                        const next = res.state;
+                        if (prev?.phase !== next.phase) { setSnoopResult(null); setActionTargeting(null); }
+                        return next;
+                    });
+                }
+            } catch {}
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [roomIdRef.current]);
 
-        socket.on('room_created', (state) => setGameState(state));
-        socket.on('state_updated', (state) => setGameState(state));
-        socket.on('phase_started', (state) => {
+    const action = (type: string, payload?: unknown) => {
+        if (!roomIdRef.current) return;
+        api.action(roomIdRef.current, type, payload).catch(() => {});
+    };
+
+    const handleRevealRole = () => action('reveal_role');
+    const handleSkipGossip = () => action('skip_gossip');
+    const handleSkipInterrogation = () => action('skip_interrogation');
+    const handleLockVote = (targetId: string) => action('lock_vote', { targetId });
+    const handleStartGame = () => action('start_game');
+    const handleGossipVote = (targetId: string) => action('gossip_vote', { targetId });
+    const handleVote = (targetId: string) => action('vote', { targetId });
+    const handleToggleItemExposure = () => action('toggle_item_exposure');
+
+    const handleCreateRoom = async () => {
+        if (!nickname) { setError("Por favor, introduce un nombre"); return; }
+        try {
+            const state = await api.createRoom(nickname, selectedAvatar);
+            roomIdRef.current = state.roomId;
             setGameState(state);
-            setSnoopResult(null);
-            setActionTargeting(null);
-        });
-        socket.on('event_message', (msg) => {
-            setInfo(msg);
-            setTimeout(() => setInfo(null), 10000);
-        });
-        socket.on('snoop_result', (res) => setSnoopResult(res));
-        socket.on('error', (msg) => {
-            setError(msg);
-            setTimeout(() => setError(null), 3000);
-        });
-
-        return () => {
-            socket.off('room_created');
-            socket.off('state_updated');
-            socket.off('phase_started');
-            socket.off('event_message');
-            socket.off('snoop_result');
-            socket.off('error');
-        };
-    }, []);
-
-    const handleRevealRole = () => {
-        socket.emit('reveal_role');
+        } catch (e: any) { setError(e.message); }
     };
 
-    const handleSkipGossip = () => {
-        socket.emit('skip_gossip');
-    };
-
-    const handleSkipInterrogation = () => {
-        socket.emit('skip_interrogation');
-    };
-
-    const handleLockVote = (targetId: string) => {
-        socket.emit('lock_vote', targetId);
-    };
-
-    const handleCreateRoom = () => {
-        if (!nickname) {
-            setError("Por favor, introduce un nombre");
-            return;
-        }
-        socket.emit('create_room', {nickname, avatar: selectedAvatar});
-    };
-
-    const handleJoinRoom = () => {
-        if (!nickname || !roomIdInput) {
-            setError("Introduce tu nombre y el código de la sala");
-            return;
-        }
-        socket.emit('join_room', {roomId: roomIdInput, nickname, avatar: selectedAvatar});
-    };
-
-    const handleStartGame = () => {
-        socket.emit('start_game');
-    };
-
-    const handleGossipVote = (targetId: string) => {
-        socket.emit('gossip_vote', targetId);
+    const handleJoinRoom = async () => {
+        if (!nickname || !roomIdInput) { setError("Introduce tu nombre y el código de la sala"); return; }
+        try {
+            const state = await api.joinRoom(roomIdInput, nickname, selectedAvatar);
+            roomIdRef.current = state.roomId;
+            setGameState(state);
+        } catch (e: any) { setError(e.message); }
     };
 
     const handleSecretAction = (type: SecretActionType) => {
         if (type === SecretActionType.SKIP) {
-            socket.emit('secret_action', {type, targetId1: socket.id}); // targetId doesn't matter for skip
+            action('secret_action', { type, targetId1: playerId });
             return;
         }
-        if (type === SecretActionType.SHUFFLE) {
-            setActionTargeting({type});
-        } else if (type === SecretActionType.SNOOP || type === SecretActionType.STEAL || type === SecretActionType.SWAP || type === SecretActionType.ALIBI || type === SecretActionType.PLANT_EVIDENCE) {
-            setActionTargeting({type});
-        }
+        setActionTargeting({type});
     };
 
     const handleTargetSelect = (targetId: string) => {
         if (!actionTargeting) return;
-
         if (actionTargeting.type === SecretActionType.SHUFFLE) {
             if (!actionTargeting.firstTargetId) {
                 setActionTargeting({...actionTargeting, firstTargetId: targetId});
             } else {
-                socket.emit('secret_action', {
-                    type: SecretActionType.SHUFFLE,
-                    targetId1: actionTargeting.firstTargetId,
-                    targetId2: targetId
-                });
+                action('secret_action', { type: SecretActionType.SHUFFLE, targetId1: actionTargeting.firstTargetId, targetId2: targetId });
                 setActionTargeting(null);
             }
         } else {
-            socket.emit('secret_action', {
-                type: actionTargeting.type,
-                targetId1: targetId
-            });
+            action('secret_action', { type: actionTargeting.type, targetId1: targetId });
             setActionTargeting(null);
         }
-    };
-
-    const handleVote = (targetId: string) => {
-        socket.emit('vote', targetId);
-    };
-
-    const handleToggleItemExposure = () => {
-        socket.emit('toggle_item_exposure');
     };
 
     if (!gameState) {
@@ -715,7 +691,7 @@ export default function App() {
                                     transition={{delay: idx * 0.05}}
                                     className={cn(
                                         "relative aspect-[3/4] flex flex-col items-stretch p-2 rounded-2xl border-2 overflow-hidden",
-                                        p.id === socket.id
+                                        p.id === playerId
                                             ? "border-red-500/60 bg-gradient-to-b from-red-950/30 to-black/60 shadow-[0_0_25px_rgba(239,68,68,0.2)]"
                                             : "border-white/10 bg-white/[0.04]"
                                     )}
@@ -770,7 +746,7 @@ export default function App() {
                                         : 'Iniciar Misterio'}
                                 </MansionButton>
                                 <MansionButton
-                                    onClick={() => socket.emit('add_bot')}
+                                    onClick={() => action('add_bot')}
                                     variant="secondary"
                                     className="w-full text-[10px]"
                                 >
@@ -899,7 +875,7 @@ export default function App() {
                                         <div className="mb-6 p-4 bg-red-950/20 border border-red-500/20 rounded-2xl">
                                             <MansionLabel>Tu Cómplice</MansionLabel>
                                             <div className="flex items-center justify-center gap-2">
-                                                {killers.filter(k => k.id !== socket.id).map(k => (
+                                                {killers.filter(k => k.id !== playerId).map(k => (
                                                     <span key={k.id}
                                                           className="text-lg font-bold">{k.avatar} {k.nickname}</span>
                                                 ))}
@@ -998,12 +974,12 @@ export default function App() {
                                             {gameState.players.filter(p => p.isAlive).map(p => (
                                                 <button
                                                     key={p.id}
-                                                    onClick={() => !me?.gossipVote && me?.isAlive && p.id !== socket.id && handleGossipVote(p.id)}
-                                                    disabled={!!me?.gossipVote || !me?.isAlive || p.id === socket.id}
+                                                    onClick={() => !me?.gossipVote && me?.isAlive && p.id !== playerId && handleGossipVote(p.id)}
+                                                    disabled={!!me?.gossipVote || !me?.isAlive || p.id === playerId}
                                                     className={cn(
                                                         "w-full text-sm p-4 rounded-2xl border transition-all flex items-center justify-between",
                                                         me?.gossipVote === p.id ? "bg-white text-black border-transparent" : "bg-white/5 border-white/10",
-                                                        (!me?.gossipVote && me?.isAlive && p.id !== socket.id) ? "hover:bg-white/10" : "opacity-30 cursor-not-allowed"
+                                                        (!me?.gossipVote && me?.isAlive && p.id !== playerId) ? "hover:bg-white/10" : "opacity-30 cursor-not-allowed"
                                                     )}
                                                 >
                                                     <div className="flex items-center gap-3">
@@ -1023,7 +999,7 @@ export default function App() {
 
                                                         {/* Indicators for others who voted (voto secreto) */}
                                                         <div className="flex -space-x-1">
-                                                            {gameState.players.filter(v => v.hasGossipVoted && v.gossipVote === p.id && v.id !== socket.id).map(v => (
+                                                            {gameState.players.filter(v => v.hasGossipVoted && v.gossipVote === p.id && v.id !== playerId).map(v => (
                                                                 <div key={v.id}
                                                                      className="w-5 h-5 rounded-full border border-white/20 bg-white/5 flex items-center justify-center text-[8px] animate-pulse">
                                                                     ?
@@ -1080,7 +1056,7 @@ export default function App() {
                                                             : `Selecciona un Objetivo para ${actionTargeting.type}`}
                                                     </MansionLabel>
                                                     <div className="grid grid-cols-2 gap-2">
-                                                        {gameState.players.filter(p => p.isAlive && p.id !== socket.id && p.id !== actionTargeting.firstTargetId).map(p => (
+                                                        {gameState.players.filter(p => p.isAlive && p.id !== playerId && p.id !== actionTargeting.firstTargetId).map(p => (
                                                             <button
                                                                 key={p.id}
                                                                 onClick={() => handleTargetSelect(p.id)}
@@ -1207,7 +1183,7 @@ export default function App() {
                                 >
                                     <MansionCard className={cn(
                                         "bg-white/5 border-t-2 transition-all p-10 text-center relative",
-                                        gameState.gossipResults[gameState.interrogationIndex].mostVotedId === socket.id ? "border-red-500 bg-red-500/10 shadow-[0_0_50px_rgba(239,68,68,0.2)]" : "border-white/20"
+                                        gameState.gossipResults[gameState.interrogationIndex].mostVotedId === playerId ? "border-red-500 bg-red-500/10 shadow-[0_0_50px_rgba(239,68,68,0.2)]" : "border-white/20"
                                     )}>
                                         {(!gameState.isInterrogationQuestionWindow) && gameState.interrogationQuestion && (
                                             <motion.div
@@ -1222,7 +1198,7 @@ export default function App() {
                                         )}
 
                                         <MansionLabel
-                                            className={gameState.gossipResults[gameState.interrogationIndex].mostVotedId === socket.id ? "text-red-400" : ""}>
+                                            className={gameState.gossipResults[gameState.interrogationIndex].mostVotedId === playerId ? "text-red-400" : ""}>
                                             La Acusación Popular
                                         </MansionLabel>
                                         <h3 className="text-2xl font-serif leading-relaxed italic mb-10 mt-6 px-4">
@@ -1231,7 +1207,7 @@ export default function App() {
 
                                         <div className={cn(
                                             "p-8 rounded-3xl inline-block min-w-[240px] border",
-                                            gameState.gossipResults[gameState.interrogationIndex].mostVotedId === socket.id ? "bg-red-500/20 border-red-500/30" : "bg-white/10 border-white/10"
+                                            gameState.gossipResults[gameState.interrogationIndex].mostVotedId === playerId ? "bg-red-500/20 border-red-500/30" : "bg-white/10 border-white/10"
                                         )}>
                                             <p className="text-[10px] uppercase font-black tracking-[0.4em] mb-3 opacity-60">El
                                                 Principal Sospechoso</p>
@@ -1241,7 +1217,7 @@ export default function App() {
                                                     className="w-10 h-10 flex items-center justify-center text-4xl"/>
                                                 <p className={cn(
                                                     "font-serif text-3xl",
-                                                    gameState.gossipResults[gameState.interrogationIndex].mostVotedId === socket.id ? "text-red-100" : "text-white"
+                                                    gameState.gossipResults[gameState.interrogationIndex].mostVotedId === playerId ? "text-red-100" : "text-white"
                                                 )}>{gameState.gossipResults[gameState.interrogationIndex].mostVotedName}</p>
                                             </div>
                                         </div>
@@ -1259,10 +1235,10 @@ export default function App() {
                                                     <MansionButton
                                                         onClick={handleSkipInterrogation}
                                                         variant={me?.isReadyToSkip ? "secondary" : "primary"}
-                                                        disabled={me?.isReadyToSkip || !me?.isAlive || socket.id !== gameState.gossipResults[gameState.interrogationIndex]?.mostVotedId}
-                                                        className={cn("w-full text-[10px] transition-all", (me?.isReadyToSkip || socket.id !== gameState.gossipResults[gameState.interrogationIndex]?.mostVotedId) && "opacity-50")}
+                                                        disabled={me?.isReadyToSkip || !me?.isAlive || playerId !== gameState.gossipResults[gameState.interrogationIndex]?.mostVotedId}
+                                                        className={cn("w-full text-[10px] transition-all", (me?.isReadyToSkip || playerId !== gameState.gossipResults[gameState.interrogationIndex]?.mostVotedId) && "opacity-50")}
                                                     >
-                                                        {socket.id !== gameState.gossipResults[gameState.interrogationIndex]?.mostVotedId
+                                                        {playerId !== gameState.gossipResults[gameState.interrogationIndex]?.mostVotedId
                                                             ? "ESPERANDO DEFENSA"
                                                             : me?.isReadyToSkip ? "Esperando a los demás..." : "YA DIJE TODO"}
                                                         {me?.isReadyToSkip && <span
@@ -1303,7 +1279,7 @@ export default function App() {
                                     <div key={p.id} className={cn(
                                         "flex items-center justify-between p-4 rounded-2xl border transition-all h-20",
                                         me?.votedFor === p.id ? "bg-white text-black border-transparent" : "bg-white/5 border-white/10",
-                                        p.id === socket.id && "opacity-40 grayscale pointer-events-none"
+                                        p.id === playerId && "opacity-40 grayscale pointer-events-none"
                                     )}>
                                         <div className="flex items-center gap-4">
                                             <AvatarDisplay avatar={p.avatar}
