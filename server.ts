@@ -16,7 +16,7 @@ const REVEAL_TIMER = 10; // Reduzido para dar tempo de ler, mas ser rápido
 const INTRO_TIMER = 15;
 const VOTING_TIMER = 60;
 const RESULT_TIMER = 15;
-const AVATARS = ['🤵', '💃', '🕵️', '🎩', '🍷', '💍', '👠', '💼'];
+const AVATARS = ['bibs', 'gb', 'lavis', 'lucas', 'mat', 'mel', '🤵', '💃'];
 
 const ITEMS_POOL = Object.values(Item).filter(i => i !== Item.KNIFE);
 
@@ -122,7 +122,10 @@ async function startServer() {
     socket.on("add_bot", () => {
       const roomId = playerSockets.get(socket.id);
       const room = roomById(roomId);
-      if (!room || room.players[0].id !== socket.id) return;
+      if (!room) return;
+      const requester = room.players.find(p => p.id === socket.id);
+      if (!requester?.isHost) return;
+      if (room.phase !== GamePhase.LOBBY) return;
       if (room.players.length >= 8) return;
 
       const usedAvatars = room.players.map(p => p.avatar);
@@ -151,7 +154,7 @@ async function startServer() {
         canPerformSecretAction: false,
         isIncriminated: false,
         roleRevealed: true,
-        itemVisible: true,
+        itemVisible: false,
         logs: []
       };
 
@@ -182,7 +185,10 @@ async function startServer() {
     socket.on("start_game", () => {
       const roomId = playerSockets.get(socket.id);
       const room = roomById(roomId);
-      if (!room || room.players[0].id !== socket.id) return;
+      if (!room) return;
+      const requester = room.players.find(p => p.id === socket.id);
+      if (!requester?.isHost) return;
+      if (room.phase !== GamePhase.LOBBY) return;
       if (room.players.length < 4) {
         socket.emit("event_message", "Mínimo de 4 jogadores para iniciar!");
         return;
@@ -388,7 +394,7 @@ async function startServer() {
       const player = room.players.find(p => p.id === socket.id);
       if (player && player.isAlive) {
         if (room.phase === GamePhase.INTERROGATION) {
-          // Only the person being interrogated can skip in this phase
+          if (room.isInterrogationQuestionWindow) return;
           const currentSuspectId = room.gossipResults[room.interrogationIndex]?.mostVotedId;
           if (socket.id === currentSuspectId) {
             room.timer = 0;
@@ -500,7 +506,9 @@ async function startServer() {
   
         const player = room.players.find(p => p.id === socket.id);
         if (player && player.isAlive && !player.hasLockedVote) {
-          // If they haven't picked anyone yet, or changed their mind at the last second
+          if (player.id === targetId) return;
+          const target = room.players.find(p => p.id === targetId);
+          if (!target || !target.isAlive) return;
           player.votedFor = targetId;
           player.hasLockedVote = true;
           
@@ -534,8 +542,15 @@ async function startServer() {
           if (room.players.length === 0) {
             rooms.delete(roomId);
           } else {
-            if (room.players.length > 0 && socket.id === room.players[0].id) {
-              room.players[0].isHost = true;
+            const hadHost = room.players.some(p => p.isHost);
+            if (!hadHost) {
+              const newHost = room.players.find(p => !p.id.startsWith('bot_'));
+              if (newHost) {
+                newHost.isHost = true;
+              } else {
+                rooms.delete(roomId);
+                return;
+              }
             }
             emitState(room);
           }
@@ -673,8 +688,13 @@ async function startServer() {
     if (room.questionIndex < currentMax) {
       startPhase(room, room.phase as GamePhase, room.phase === GamePhase.GOSSIP_2 ? GOSSIP_TIMER : GOSSIP_TIMER);
     } else {
-      room.interrogationIndex = 0;
-      startPhase(room, GamePhase.INTERROGATION, 6); 
+      room.gossipResults = room.gossipResults.filter(r => r.mostVotedId);
+      if (room.gossipResults.length === 0) {
+        startPhase(room, GamePhase.VOTING, VOTING_TIMER);
+      } else {
+        room.interrogationIndex = 0;
+        startPhase(room, GamePhase.INTERROGATION, 6);
+      }
     }
   }
 
@@ -729,6 +749,90 @@ async function startServer() {
     }
 
     emitState(room, "phase_started");
+  }
+
+  function executeBotAction(room: GameState, bot: Player) {
+    const others = room.players.filter(o => o.id !== bot.id && o.isAlive);
+    if (others.length === 0) {
+      bot.canPerformSecretAction = false;
+      bot.assignedSecretAction = undefined;
+      return;
+    }
+    const pickRandom = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
+    const action = bot.assignedSecretAction;
+
+    const swapItems = (a: Player, b: Player) => {
+      const temp = a.item;
+      a.item = b.item;
+      b.item = temp;
+      [a, b].forEach(p => {
+        if (!p.id.startsWith('bot_')) {
+          const msg = `Seu item foi trocado! Agora você tem: ${p.item}`;
+          io.to(p.id).emit("event_message", msg);
+          if (!p.logs) p.logs = [];
+          p.logs.push(msg);
+          p.notification = { message: msg, type: 'swapped' };
+        }
+      });
+    };
+
+    switch (action) {
+      case SecretActionType.SNOOP:
+      case SecretActionType.ALIBI:
+      case SecretActionType.SKIP:
+        break;
+      case SecretActionType.STEAL: {
+        const target = pickRandom(others);
+        const oldItem = bot.item;
+        bot.item = target.item;
+        target.item = oldItem;
+        if (!target.id.startsWith('bot_')) {
+          const stolenMsg = `Seu item foi roubado! Agora você tem: ${target.item}`;
+          io.to(target.id).emit("event_message", stolenMsg);
+          if (!target.logs) target.logs = [];
+          target.logs.push(stolenMsg);
+          target.notification = { message: stolenMsg, type: 'stolen' };
+        }
+        break;
+      }
+      case SecretActionType.SWAP: {
+        const target = pickRandom(others);
+        swapItems(bot, target);
+        break;
+      }
+      case SecretActionType.SHUFFLE: {
+        if (others.length >= 2) {
+          const t1 = pickRandom(others);
+          const remaining = others.filter(o => o.id !== t1.id);
+          const t2 = pickRandom(remaining);
+          swapItems(t1, t2);
+        }
+        break;
+      }
+      case SecretActionType.PLANT_EVIDENCE: {
+        if (!bot.usedPlantEvidence && bot.hasKnife) {
+          const innocentTargets = others.filter(o => o.role !== Role.KILLER);
+          const target = innocentTargets.length > 0 ? pickRandom(innocentTargets) : pickRandom(others);
+          target.isIncriminated = true;
+          target.item = Item.KNIFE;
+          bot.usedPlantEvidence = true;
+          if (!target.id.startsWith('bot_')) {
+            io.to(target.id).emit("event_message", "VOCÊ FOI INCRIMINADO!");
+            if (!target.logs) target.logs = [];
+            target.logs.push("Alguém plantou evidências contra você!");
+            target.notification = { message: "Alguém plantou evidências contra você!", type: 'incriminated' };
+          }
+        }
+        break;
+      }
+      default: {
+        const target = pickRandom(others);
+        swapItems(bot, target);
+      }
+    }
+
+    bot.canPerformSecretAction = false;
+    bot.assignedSecretAction = undefined;
   }
 
   function triggerRandomEvent(room: GameState) {
@@ -827,23 +931,14 @@ async function startServer() {
         // Handle Bot Voting in Gossip
         if (room.phase === GamePhase.GOSSIP || room.phase === GamePhase.GOSSIP_2) {
           if (room.isSecretActionWindow) {
-             // Bot actions during window
              const aliveBotsWithActions = room.players.filter(p => p.id.startsWith('bot_') && p.isAlive && p.canPerformSecretAction);
              aliveBotsWithActions.forEach(bot => {
-               if (Math.random() < 0.1) { // 10% chance each tick to act
-                  const others = room.players.filter(o => o.id !== bot.id && o.isAlive);
-                  if (others.length >= 1) {
-                    const target = others[Math.floor(Math.random() * others.length)];
-                    const temp = bot.item;
-                    bot.item = target.item;
-                    target.item = temp;
-                    bot.canPerformSecretAction = false;
-                    emitState(room);
-                  }
+               if (Math.random() < 0.1) {
+                 executeBotAction(room, bot);
+                 emitState(room);
                }
              });
 
-             // If timer expires in Action Window, go to next Gossip Step
              if (room.timer <= 0) {
                nextGossipStep(room);
              }
