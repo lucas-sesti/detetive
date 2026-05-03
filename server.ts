@@ -4,15 +4,29 @@ import { Server } from "socket.io";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs } from "firebase/firestore";
 import { GamePhase, Role, Item, Player, GameState, SecretActionType, SecretActionPayload } from "./src/types.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const firebaseConfig = {
+  projectId: "second-terrain-406121",
+  appId: "1:483233971300:web:dd87f4d18e6ff8832df371",
+  apiKey: "AIzaSyCh_KTKdLbuCuEmP7BGB-pf74awPeRU4b8",
+  authDomain: "second-terrain-406121.firebaseapp.com",
+  storageBucket: "second-terrain-406121.firebasestorage.app",
+  messagingSenderId: "483233971300",
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp, "detetive");
+
 const PORT = 3000;
-const GOSSIP_TIMER = 300; 
+const GOSSIP_TIMER = 300;
 const GOSSIP_VOTING_TIMER = 30;
-const REVEAL_TIMER = 10; // Reduzido para dar tempo de ler, mas ser rápido
+const REVEAL_TIMER = 10;
 const INTRO_TIMER = 28;
 const INTERROGATION_INTRO_TIMER = 20;
 const VOTING_TIMER = 60;
@@ -43,20 +57,49 @@ const INTERROGATION_QUESTIONS = [
   "¿Incriminaste a alguien?"
 ];
 
+async function saveRoom(room: GameState) {
+  await setDoc(doc(db, "rooms", room.roomId), JSON.parse(JSON.stringify(room)));
+}
+
+async function getRoom(roomId: string): Promise<GameState | null> {
+  const snap = await getDoc(doc(db, "rooms", roomId));
+  return snap.exists() ? (snap.data() as GameState) : null;
+}
+
+async function deleteRoom(roomId: string) {
+  await deleteDoc(doc(db, "rooms", roomId));
+}
+
+async function getAllRooms(): Promise<GameState[]> {
+  const snap = await getDocs(collection(db, "rooms"));
+  return snap.docs.map(d => d.data() as GameState);
+}
+
+async function savePlayerSocket(socketId: string, roomId: string) {
+  await setDoc(doc(db, "playerSockets", socketId), { roomId });
+}
+
+async function getPlayerSocket(socketId: string): Promise<string | null> {
+  const snap = await getDoc(doc(db, "playerSockets", socketId));
+  return snap.exists() ? snap.data().roomId : null;
+}
+
+async function deletePlayerSocket(socketId: string) {
+  await deleteDoc(doc(db, "playerSockets", socketId));
+}
+
 async function startServer() {
   const app = express();
   const httpServer = createServer(app);
   const io = new Server(httpServer, {
+    transports: ["polling"],
     cors: {
       origin: "*",
     },
   });
 
-  const rooms = new Map<string, GameState>();
-  const playerSockets = new Map<string, string>(); // socketId -> roomId
-
   io.on("connection", (socket) => {
-    socket.on("create_room", ({ nickname, avatar }) => {
+    socket.on("create_room", async ({ nickname, avatar }) => {
       const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
       const host: Player = {
         id: socket.id,
@@ -82,15 +125,15 @@ async function startServer() {
         interrogationIndex: 0
       };
 
-      rooms.set(roomId, newState);
-      playerSockets.set(socket.id, roomId);
+      await saveRoom(newState);
+      await savePlayerSocket(socket.id, roomId);
       socket.join(roomId);
       socket.emit("room_created", newState);
     });
 
-    socket.on("join_room", ({ roomId, nickname, avatar }) => {
+    socket.on("join_room", async ({ roomId, nickname, avatar }) => {
       const normalizedRoomId = roomId.toUpperCase();
-      const room = rooms.get(normalizedRoomId);
+      const room = await getRoom(normalizedRoomId);
       if (!room) {
         socket.emit("error", "Room not found");
         return;
@@ -115,14 +158,14 @@ async function startServer() {
       };
 
       room.players.push(newPlayer);
-      playerSockets.set(socket.id, normalizedRoomId);
+      await savePlayerSocket(socket.id, normalizedRoomId);
       socket.join(normalizedRoomId);
-      emitState(room);
+      await emitState(room);
     });
 
-    socket.on("add_bot", () => {
-      const roomId = playerSockets.get(socket.id);
-      const room = roomById(roomId);
+    socket.on("add_bot", async () => {
+      const roomId = await getPlayerSocket(socket.id);
+      const room = await roomById(roomId);
       if (!room) return;
       const requester = room.players.find(p => p.id === socket.id);
       if (!requester?.isHost) return;
@@ -137,15 +180,14 @@ async function startServer() {
       const usedNames = room.players.map(p => p.nickname);
       const possibleBotNames = ["Benoit", "Marta", "Ransom", "Linda", "Richard", "Joni", "Walt", "Jacob", "Harlan", "Meg", "Fran", "Alan"];
       const botNames = possibleBotNames.filter(n => !usedNames.some(un => un.startsWith(n)));
-      
+
       let botNickname = "";
       if (botNames.length > 0) {
         botNickname = `${botNames[Math.floor(Math.random() * botNames.length)]} (Bot)`;
       } else {
-        // Safe fallback if somehow we run out of names
         botNickname = `Invitado ${Math.floor(Math.random() * 999)} (Bot)`;
       }
-      
+
       const bot: Player = {
         id: botId,
         nickname: botNickname,
@@ -160,32 +202,31 @@ async function startServer() {
       };
 
       room.players.push(bot);
-      emitState(room);
+      await emitState(room);
     });
 
-    socket.on("reveal_role", () => {
-      const roomId = playerSockets.get(socket.id);
-      const room = roomById(roomId);
+    socket.on("reveal_role", async () => {
+      const roomId = await getPlayerSocket(socket.id);
+      const room = await roomById(roomId);
       if (!room || room.phase !== GamePhase.REVEAL) return;
-      
+
       const player = room.players.find(p => p.id === socket.id);
       if (player) {
         player.roleRevealed = true;
         player.itemVisible = true;
 
-        // Se for o último a revelar, reduz o tempo para 5 segundos
         const allRevealed = room.players.filter(p => !p.id.startsWith('bot_')).every(p => p.roleRevealed);
         if (allRevealed && room.timer > 5) {
           room.timer = 5;
         }
 
-        emitState(room);
+        await emitState(room);
       }
     });
 
-    socket.on("start_game", () => {
-      const roomId = playerSockets.get(socket.id);
-      const room = roomById(roomId);
+    socket.on("start_game", async () => {
+      const roomId = await getPlayerSocket(socket.id);
+      const room = await roomById(roomId);
       if (!room) return;
       const requester = room.players.find(p => p.id === socket.id);
       if (!requester?.isHost) return;
@@ -213,7 +254,6 @@ async function startServer() {
         p.logs = [];
       });
 
-      // Notify killers about each other
       const killers = room.players.filter(p => p.role === Role.KILLER);
       if (killers.length > 1) {
         killers.forEach(k => {
@@ -221,7 +261,6 @@ async function startServer() {
           const partnerNames = others.map(o => o.nickname).join(", ");
           const msg = `Tu cómplice asesino es: ${partnerNames}. ¡Trabajad juntos para escapar de la mansión!`;
           k.logs.push(msg);
-          // Use 'incriminated' type for a red, urgent notification
           k.notification = { message: msg, type: 'incriminated' };
         });
       }
@@ -232,44 +271,41 @@ async function startServer() {
       room.hasTriggeredRandomEvent = false;
       room.gossipResults = [];
       refreshGossipQuestions(room);
-      startPhase(room, GamePhase.REVEAL, REVEAL_TIMER); 
+      await startPhase(room, GamePhase.REVEAL, REVEAL_TIMER);
     });
 
-    socket.on("gossip_vote", (targetId) => {
-      const roomId = playerSockets.get(socket.id);
-      const room = roomById(roomId);
+    socket.on("gossip_vote", async (targetId) => {
+      const roomId = await getPlayerSocket(socket.id);
+      const room = await roomById(roomId);
       if (!room || (room.phase !== GamePhase.GOSSIP && room.phase !== GamePhase.GOSSIP_2)) return;
 
       const player = room.players.find(p => p.id === socket.id);
       if (player && player.isAlive) {
-         // Não pode votar em si mesmo na fofoca
-         if (player.id === targetId) return;
+        if (player.id === targetId) return;
 
-         player.gossipVote = targetId;
-         emitState(room);
-         
-         // Check if all alive players voted
-         const alivePlayers = room.players.filter(p => !p.id.startsWith('bot_') && p.isAlive);
-         const bots = room.players.filter(p => p.id.startsWith('bot_') && p.isAlive);
-         
-         // Simulate bots voting if they haven't
-         bots.forEach(b => {
-           if (!b.gossipVote) {
-             const others = room.players.filter(o => o.id !== b.id && o.isAlive);
-             b.gossipVote = others[Math.floor(Math.random() * others.length)].id;
-           }
-         });
+        player.gossipVote = targetId;
+        await emitState(room);
 
-         const allRealPlayersVoted = alivePlayers.every(p => p.gossipVote);
-         if (allRealPlayersVoted && !room.isSecretActionWindow) {
-           processGossipQuestion(room);
-         }
+        const alivePlayers = room.players.filter(p => !p.id.startsWith('bot_') && p.isAlive);
+        const bots = room.players.filter(p => p.id.startsWith('bot_') && p.isAlive);
+
+        bots.forEach(b => {
+          if (!b.gossipVote) {
+            const others = room.players.filter(o => o.id !== b.id && o.isAlive);
+            b.gossipVote = others[Math.floor(Math.random() * others.length)].id;
+          }
+        });
+
+        const allRealPlayersVoted = alivePlayers.every(p => p.gossipVote);
+        if (allRealPlayersVoted && !room.isSecretActionWindow) {
+          await processGossipQuestion(room);
+        }
       }
     });
 
-    socket.on("secret_action", (payload: SecretActionPayload) => {
-      const roomId = playerSockets.get(socket.id);
-      const room = roomById(roomId);
+    socket.on("secret_action", async (payload: SecretActionPayload) => {
+      const roomId = await getPlayerSocket(socket.id);
+      const room = await roomById(roomId);
       if (!room || room.phase !== GamePhase.GOSSIP) return;
 
       const actor = room.players.find(p => p.id === socket.id);
@@ -285,8 +321,7 @@ async function startServer() {
         const temp = p1.item;
         p1.item = p2.item;
         p2.item = temp;
-        
-        // Notify both players if they are real
+
         if (!p1.id.startsWith('bot_')) {
           const msg = `¡Tu objeto fue intercambiado! Ahora tienes: ${p1.item}`;
           io.to(p1.id).emit("event_message", msg);
@@ -363,8 +398,7 @@ async function startServer() {
         case SecretActionType.PLANT_EVIDENCE:
           if (!actor.usedPlantEvidence && actor.hasKnife) {
             target1.isIncriminated = true;
-            target1.item = Item.KNIFE; // Passa a ter o item da faca
-            // Assassinos mantêm sua faca, então não definimos hasKnife como false
+            target1.item = Item.KNIFE;
             actor.usedPlantEvidence = true;
             const plantMsg = `¡Incriminaste a ${target1.nickname}!`;
             socket.emit("event_message", plantMsg);
@@ -389,12 +423,12 @@ async function startServer() {
 
       actor.canPerformSecretAction = false;
       room.lastAction = { type: payload.type, actor: actor.nickname, details: detail };
-      emitState(room);
+      await emitState(room);
     });
 
-    socket.on("skip_interrogation", () => {
-      const roomId = playerSockets.get(socket.id);
-      const room = roomById(roomId);
+    socket.on("skip_interrogation", async () => {
+      const roomId = await getPlayerSocket(socket.id);
+      const room = await roomById(roomId);
       if (!room || (room.phase !== GamePhase.INTERROGATION && room.phase !== GamePhase.GOSSIP && room.phase !== GamePhase.GOSSIP_2)) return;
 
       const player = room.players.find(p => p.id === socket.id);
@@ -404,21 +438,19 @@ async function startServer() {
           const currentSuspectId = room.gossipResults[room.interrogationIndex]?.mostVotedId;
           if (socket.id === currentSuspectId) {
             room.timer = 0;
-            emitState(room);
+            await emitState(room);
           }
           return;
         }
 
         player.isReadyToSkip = true;
-        emitState(room);
+        await emitState(room);
 
         const alivePlayers = room.players.filter(p => !p.id.startsWith('bot_') && p.isAlive);
         if (alivePlayers.every(p => p.isReadyToSkip)) {
-          // In Gossip phases
           if (room.isSecretActionWindow) {
-            nextGossipStep(room);
+            await nextGossipStep(room);
           } else {
-            // Force bots to vote if they haven't
             const bots = room.players.filter(p => p.id.startsWith('bot_') && p.isAlive);
             bots.forEach(b => {
               if (!b.gossipVote) {
@@ -428,31 +460,29 @@ async function startServer() {
                 }
               }
             });
-            processGossipQuestion(room);
+            await processGossipQuestion(room);
           }
         }
       }
     });
 
-    socket.on("skip_gossip", () => {
-      const roomId = playerSockets.get(socket.id);
-      const room = roomById(roomId);
+    socket.on("skip_gossip", async () => {
+      const roomId = await getPlayerSocket(socket.id);
+      const room = await roomById(roomId);
       if (!room || (room.phase !== GamePhase.GOSSIP && room.phase !== GamePhase.GOSSIP_2)) return;
 
       const player = room.players.find(p => p.id === socket.id);
       if (player && player.isAlive) {
         player.isReadyToSkip = true;
-        emitState(room);
+        await emitState(room);
 
-        // Check if all alive players are ready to skip
         const alivePlayers = room.players.filter(p => !p.id.startsWith('bot_') && p.isAlive);
         const allReady = alivePlayers.every(p => p.isReadyToSkip);
 
         if (allReady) {
           if (room.isSecretActionWindow) {
-            nextGossipStep(room);
+            await nextGossipStep(room);
           } else {
-            // Force bots to vote if they haven't
             const bots = room.players.filter(p => p.id.startsWith('bot_') && p.isAlive);
             bots.forEach(b => {
               if (!b.gossipVote) {
@@ -462,91 +492,89 @@ async function startServer() {
                 }
               }
             });
-            processGossipQuestion(room);
+            await processGossipQuestion(room);
           }
         }
       }
     });
 
-    socket.on("toggle_item_exposure", () => {
-      const roomId = playerSockets.get(socket.id);
-      const room = roomById(roomId);
+    socket.on("toggle_item_exposure", async () => {
+      const roomId = await getPlayerSocket(socket.id);
+      const room = await roomById(roomId);
       if (!room) return;
       const player = room.players.find(p => p.id === socket.id);
       if (player) {
         player.itemExposed = !player.itemExposed;
-        emitState(room);
+        await emitState(room);
       }
     });
 
-    socket.on("clear_notification", () => {
-      const roomId = playerSockets.get(socket.id);
-      const room = roomById(roomId);
+    socket.on("clear_notification", async () => {
+      const roomId = await getPlayerSocket(socket.id);
+      const room = await roomById(roomId);
       if (!room) return;
       const player = room.players.find(p => p.id === socket.id);
       if (player) {
         player.notification = null;
-        emitState(room);
+        await emitState(room);
       }
     });
 
-    socket.on("vote", (targetId) => {
-      const roomId = playerSockets.get(socket.id);
-      const room = roomById(roomId);
+    socket.on("vote", async (targetId) => {
+      const roomId = await getPlayerSocket(socket.id);
+      const room = await roomById(roomId);
       if (!room || room.phase !== GamePhase.VOTING) return;
 
       const player = room.players.find(p => p.id === socket.id);
       if (player && player.isAlive && !player.hasLockedVote) {
-        // Can't vote for self
         if (player.id === targetId) return;
-        
         player.votedFor = targetId;
-        emitState(room);
+        await emitState(room);
       }
     });
 
-    socket.on("lock_vote", (targetId) => {
-        const roomId = playerSockets.get(socket.id);
-        const room = roomById(roomId);
-        if (!room || room.phase !== GamePhase.VOTING) return;
-  
-        const player = room.players.find(p => p.id === socket.id);
-        if (player && player.isAlive && !player.hasLockedVote) {
-          if (player.id === targetId) return;
-          const target = room.players.find(p => p.id === targetId);
-          if (!target || !target.isAlive) return;
-          player.votedFor = targetId;
-          player.hasLockedVote = true;
-          
-          // Bots lock their votes automatically if they chose
-          const bots = room.players.filter(p => p.id.startsWith('bot_') && p.isAlive);
-          bots.forEach(b => {
-            if (!b.votedFor) {
-              const others = room.players.filter(o => o.id !== b.id && o.isAlive);
-              if (others.length > 0) {
-                b.votedFor = others[Math.floor(Math.random() * others.length)].id;
-              }
-              b.hasLockedVote = true;
-            }
-          });
-          
-          emitState(room);
+    socket.on("lock_vote", async (targetId) => {
+      const roomId = await getPlayerSocket(socket.id);
+      const room = await roomById(roomId);
+      if (!room || room.phase !== GamePhase.VOTING) return;
 
-          const alivePlayersVisible = room.players.filter(p => p.isAlive);
-          if (alivePlayersVisible.every(p => p.hasLockedVote)) {
-            room.timer = 0; 
+      const player = room.players.find(p => p.id === socket.id);
+      if (player && player.isAlive && !player.hasLockedVote) {
+        if (player.id === targetId) return;
+        const target = room.players.find(p => p.id === targetId);
+        if (!target || !target.isAlive) return;
+        player.votedFor = targetId;
+        player.hasLockedVote = true;
+
+        const bots = room.players.filter(p => p.id.startsWith('bot_') && p.isAlive);
+        bots.forEach(b => {
+          if (!b.votedFor) {
+            const others = room.players.filter(o => o.id !== b.id && o.isAlive);
+            if (others.length > 0) {
+              b.votedFor = others[Math.floor(Math.random() * others.length)].id;
+            }
+            b.hasLockedVote = true;
           }
+        });
+
+        await emitState(room);
+
+        const alivePlayersVisible = room.players.filter(p => p.isAlive);
+        if (alivePlayersVisible.every(p => p.hasLockedVote)) {
+          room.timer = 0;
+          await saveRoom(room);
         }
+      }
     });
 
-    socket.on("disconnect", () => {
-      const roomId = playerSockets.get(socket.id);
+    socket.on("disconnect", async () => {
+      const roomId = await getPlayerSocket(socket.id);
       if (roomId) {
-        const room = rooms.get(roomId);
+        const room = await getRoom(roomId);
         if (room) {
           room.players = room.players.filter(p => p.id !== socket.id);
           if (room.players.length === 0) {
-            rooms.delete(roomId);
+            await deleteRoom(roomId);
           } else {
             const hadHost = room.players.some(p => p.isHost);
             if (!hadHost) {
@@ -554,20 +582,21 @@ async function startServer() {
               if (newHost) {
                 newHost.isHost = true;
               } else {
-                rooms.delete(roomId);
+                await deleteRoom(roomId);
+                await deletePlayerSocket(socket.id);
                 return;
               }
             }
-            emitState(room);
+            await emitState(room);
           }
         }
-        playerSockets.delete(socket.id);
+        await deletePlayerSocket(socket.id);
       }
     });
   });
 
-  function roomById(id?: string) {
-    return id ? rooms.get(id) : null;
+  async function roomById(id?: string | null): Promise<GameState | null> {
+    return id ? getRoom(id) : null;
   }
 
   function refreshGossipQuestions(room: GameState) {
@@ -576,7 +605,8 @@ async function startServer() {
       .slice(0, 3);
   }
 
-  function emitState(room: GameState, event: string = "state_updated") {
+  async function emitState(room: GameState, event: string = "state_updated") {
+    await saveRoom(room);
     room.players.forEach(p => {
       if (!p.id.startsWith('bot_')) {
         const scrubbedPlayers = room.players.map(player => {
@@ -587,20 +617,18 @@ async function startServer() {
 
           return {
             ...player,
-            // Security: Hide sensitive data if not the owner or not game over
             role: showRole ? player.role : undefined,
             item: showItem ? player.item : undefined,
             hasKnife: showKnife ? player.hasKnife : undefined,
             assignedSecretAction: isOwner ? player.assignedSecretAction : undefined,
             logs: isOwner ? player.logs : [],
-            // Gossip and Voting scrubbing
             gossipVote: isOwner ? player.gossipVote : undefined,
             hasGossipVoted: !!player.gossipVote,
             votedFor: (isOwner || room.phase === GamePhase.RESULT || room.phase === GamePhase.GAME_OVER) ? player.votedFor : undefined,
             hasLockedVote: player.hasLockedVote
           };
         });
-        
+
         io.to(p.id).emit(event, {
           ...room,
           players: scrubbedPlayers
@@ -609,7 +637,7 @@ async function startServer() {
     });
   }
 
-  function processGossipQuestion(room: GameState) {
+  async function processGossipQuestion(room: GameState) {
     const votes: Record<string, number> = {};
     room.players.forEach(p => {
       if (p.gossipVote) {
@@ -628,31 +656,24 @@ async function startServer() {
     });
 
     if (room.phase === GamePhase.GOSSIP_2) {
-      // In Gossip 2 there are no secret actions, go directly to next step
-      nextGossipStep(room);
+      await nextGossipStep(room);
       return;
     }
 
-    // Instead of going directly to next question, go to Secret Action Window
     room.phase = GamePhase.GOSSIP;
     room.isSecretActionWindow = true;
-    room.timer = 20; // 20 seconds for secret actions
-    
-    // Reset skip status for the secret action window
+    room.timer = 20;
+
     room.players.forEach(p => p.isReadyToSkip = false);
 
-    // Assign actions to the current group of players (only in Round 1)
     if (room.roundCount === 1) {
       const alivePlayers = room.players.filter(p => p.isAlive);
       const groupSize = Math.ceil(alivePlayers.length / 3);
       const startIndex = (room.questionIndex) * groupSize;
       const group = alivePlayers.slice(startIndex, startIndex + groupSize);
-      
-      // Regular group actions
+
       group.forEach(p => {
         p.canPerformSecretAction = true;
-        
-        // Random actions for everyone in the group
         const possibleActions = [
           SecretActionType.SNOOP,
           SecretActionType.STEAL,
@@ -660,11 +681,9 @@ async function startServer() {
           SecretActionType.SHUFFLE
         ];
         if (p.role === Role.INNOCENT) possibleActions.push(SecretActionType.ALIBI);
-        
         p.assignedSecretAction = possibleActions[Math.floor(Math.random() * possibleActions.length)];
       });
 
-      // Special handling for Killers: They always get PLANT_EVIDENCE if they haven't used it
       const allKillers = room.players.filter(p => p.isAlive && p.role === Role.KILLER);
       allKillers.forEach(k => {
         if (!k.usedPlantEvidence) {
@@ -674,10 +693,10 @@ async function startServer() {
       });
     }
 
-    emitState(room);
+    await emitState(room);
   }
 
-  function nextGossipStep(room: GameState) {
+  async function nextGossipStep(room: GameState) {
     room.isSecretActionWindow = false;
     room.players.forEach(p => {
       p.canPerformSecretAction = false;
@@ -685,30 +704,26 @@ async function startServer() {
     });
 
     room.questionIndex++;
-    const maxQuestions = (room.phase === GamePhase.GOSSIP_2) ? 3 : 3; // Both use 3 questions per round normally
-    
-    // Determine the max questions for the current phase
-    // User said Gossip 2 should have 3 questions.
-    const currentMax = 3; 
+    const currentMax = 3;
 
     if (room.questionIndex < currentMax) {
-      startPhase(room, room.phase as GamePhase, room.phase === GamePhase.GOSSIP_2 ? GOSSIP_TIMER : GOSSIP_TIMER);
+      await startPhase(room, room.phase as GamePhase, GOSSIP_TIMER);
     } else {
       room.gossipResults = room.gossipResults.filter(r => r.mostVotedId);
       if (room.gossipResults.length === 0) {
-        startPhase(room, GamePhase.VOTING, VOTING_TIMER);
+        await startPhase(room, GamePhase.VOTING, VOTING_TIMER);
       } else {
         room.interrogationIndex = 0;
-        startPhase(room, GamePhase.INTERROGATION_INTRO, INTERROGATION_INTRO_TIMER);
+        await startPhase(room, GamePhase.INTERROGATION_INTRO, INTERROGATION_INTRO_TIMER);
       }
     }
   }
 
-  function startPhase(room: GameState, phase: GamePhase, duration: number) {
+  async function startPhase(room: GameState, phase: GamePhase, duration: number) {
     room.phase = phase;
     room.timer = duration;
     room.eventMessage = undefined;
-    
+
     if (phase === GamePhase.GOSSIP || phase === GamePhase.GOSSIP_2) {
       room.players.forEach(p => {
         p.gossipVote = undefined;
@@ -726,7 +741,6 @@ async function startServer() {
         room.currentQuestion = pool[Math.floor(Math.random() * pool.length)];
       }
 
-      // Random event only in phase 1 (GOSSIP) and after first question
       if (phase === GamePhase.GOSSIP && room.questionIndex > 0 && !room.hasTriggeredRandomEvent && Math.random() < 0.15) {
         triggerRandomEvent(room);
         room.hasTriggeredRandomEvent = true;
@@ -734,13 +748,13 @@ async function startServer() {
     }
 
     if (phase === GamePhase.INTERROGATION) {
-       room.players.forEach(p => {
-         p.isReadyToSkip = false;
-         p.notification = null;
-       });
-       room.interrogationQuestion = INTERROGATION_QUESTIONS[Math.floor(Math.random() * INTERROGATION_QUESTIONS.length)];
-       room.isInterrogationQuestionWindow = true; // Start with the question popup
-       room.timer = 7; // 7 seconds for the popup
+      room.players.forEach(p => {
+        p.isReadyToSkip = false;
+        p.notification = null;
+      });
+      room.interrogationQuestion = INTERROGATION_QUESTIONS[Math.floor(Math.random() * INTERROGATION_QUESTIONS.length)];
+      room.isInterrogationQuestionWindow = true;
+      room.timer = 7;
     }
 
     if (phase === GamePhase.VOTING) {
@@ -754,7 +768,7 @@ async function startServer() {
       handleVotingResults(room);
     }
 
-    emitState(room, "phase_started");
+    await emitState(room, "phase_started");
   }
 
   function executeBotAction(room: GameState, bot: Player) {
@@ -851,21 +865,18 @@ async function startServer() {
       message = "¡Se apagaron las luces! Los objetos fueron intercambiados entre algunos inocentes.";
       const aliveInnocents = room.players.filter(p => p.isAlive && p.role === Role.INNOCENT);
       if (aliveInnocents.length > 1) {
-        // Proper shuffle
         const items = aliveInnocents.map(p => p.item!);
         for (let i = items.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
           [items[i], items[j]] = [items[j], items[i]];
         }
-
         aliveInnocents.forEach((p, i) => {
           p.item = items[i];
           if (!p.logs) p.logs = [];
           const logMsg = `¡Las luces se apagaron! Tu nuevo objeto es: ${p.item}`;
           p.logs.push(logMsg);
-          
           if (!p.id.startsWith('bot_')) {
-             p.notification = { message: logMsg, type: 'swapped' };
+            p.notification = { message: logMsg, type: 'swapped' };
           }
         });
       }
@@ -874,7 +885,6 @@ async function startServer() {
       if (innocents.length > 0) {
         const victim = innocents[Math.floor(Math.random() * innocents.length)];
         message = `Testigo: Se ha visto que ${victim.nickname} tiene el objeto ${victim.item}`;
-        // Add to everyone's logs
         room.players.forEach(p => {
           if (!p.logs) p.logs = [];
           p.logs.push(message);
@@ -883,12 +893,11 @@ async function startServer() {
     }
 
     room.activePopup = { message, type: "event" };
-    // Clear popup after 5 seconds
-    setTimeout(() => {
-      const currentRoom = rooms.get(room.roomId);
+    setTimeout(async () => {
+      const currentRoom = await getRoom(room.roomId);
       if (currentRoom && currentRoom.activePopup?.message === message) {
         currentRoom.activePopup = null;
-        emitState(currentRoom);
+        await emitState(currentRoom);
       }
     }, 5000);
   }
@@ -929,53 +938,47 @@ async function startServer() {
     }
   }
 
-  setInterval(() => {
+  setInterval(async () => {
     try {
-      rooms.forEach((room) => {
-        if (room.phase === GamePhase.LOBBY || room.phase === GamePhase.GAME_OVER) return;
+      const allRooms = await getAllRooms();
+      for (const room of allRooms) {
+        if (room.phase === GamePhase.LOBBY || room.phase === GamePhase.GAME_OVER) continue;
 
-        // Handle Bot Voting in Gossip
         if (room.phase === GamePhase.GOSSIP || room.phase === GamePhase.GOSSIP_2) {
           if (room.isSecretActionWindow) {
-             const aliveBotsWithActions = room.players.filter(p => p.id.startsWith('bot_') && p.isAlive && p.canPerformSecretAction);
-             aliveBotsWithActions.forEach(bot => {
-               if (Math.random() < 0.1) {
-                 executeBotAction(room, bot);
-                 emitState(room);
-               }
-             });
+            const aliveBotsWithActions = room.players.filter(p => p.id.startsWith('bot_') && p.isAlive && p.canPerformSecretAction);
+            aliveBotsWithActions.forEach(bot => {
+              if (Math.random() < 0.1) {
+                executeBotAction(room, bot);
+              }
+            });
 
-             if (room.timer <= 0) {
-               nextGossipStep(room);
-             }
+            if (room.timer <= 0) {
+              await nextGossipStep(room);
+              continue;
+            }
           } else {
             const bots = room.players.filter(p => p.id.startsWith('bot_') && p.isAlive && !p.gossipVote);
             bots.forEach(bot => {
-               if (Math.random() < 0.3) { // 30% chance each tick to vote
-                 const others = room.players.filter(o => o.id !== bot.id && o.isAlive);
-                 bot.gossipVote = others[Math.floor(Math.random() * others.length)].id;
-                 emitState(room);
-                 
-                 // Check if all voted
-                 const alivePlayers = room.players.filter(p => p.isAlive);
-                 if (alivePlayers.every(p => p.gossipVote) && !room.isSecretActionWindow) {
-                   processGossipQuestion(room);
-                 }
-               }
+              if (Math.random() < 0.3) {
+                const others = room.players.filter(o => o.id !== bot.id && o.isAlive);
+                bot.gossipVote = others[Math.floor(Math.random() * others.length)].id;
+                const alivePlayers = room.players.filter(p => p.isAlive);
+                if (alivePlayers.every(p => p.gossipVote) && !room.isSecretActionWindow) {
+                  // will be handled below after timer decrement
+                }
+              }
             });
           }
         }
 
-        // Handle Bot Voting in Final Voting
         if (room.phase === GamePhase.VOTING) {
           const bots = room.players.filter(p => p.id.startsWith('bot_') && p.isAlive && !p.hasLockedVote);
           bots.forEach(bot => {
-            if (Math.random() < 0.2) { // 20% chance each tick to lock vote
+            if (Math.random() < 0.2) {
               const others = room.players.filter(o => o.id !== bot.id && o.isAlive);
               bot.votedFor = others[Math.floor(Math.random() * others.length)].id;
               bot.hasLockedVote = true;
-              emitState(room);
-              
               const alivePlayers = room.players.filter(p => p.isAlive);
               if (alivePlayers.every(p => p.hasLockedVote)) {
                 room.timer = 0;
@@ -991,80 +994,75 @@ async function startServer() {
         if (room.timer <= 0) {
           switch (room.phase) {
             case GamePhase.REVEAL:
-              startPhase(room, GamePhase.INTRO, INTRO_TIMER);
+              await startPhase(room, GamePhase.INTRO, INTRO_TIMER);
               break;
             case GamePhase.INTRO:
-              startPhase(room, GamePhase.TRANSITION, 8);
+              await startPhase(room, GamePhase.TRANSITION, 8);
               break;
             case GamePhase.TRANSITION:
-              startPhase(room, GamePhase.GOSSIP, GOSSIP_TIMER);
+              await startPhase(room, GamePhase.GOSSIP, GOSSIP_TIMER);
               break;
             case GamePhase.GOSSIP:
             case GamePhase.GOSSIP_2:
-              // Gossip usually ends when all vote, but timer is fallback
               if (room.isSecretActionWindow) {
-                nextGossipStep(room);
+                await nextGossipStep(room);
               } else {
-                processGossipQuestion(room);
+                await processGossipQuestion(room);
               }
               break;
             case GamePhase.INTERROGATION_INTRO:
-              startPhase(room, GamePhase.INTERROGATION, 7);
+              await startPhase(room, GamePhase.INTERROGATION, 7);
               break;
             case GamePhase.INTERROGATION:
               if (room.isInterrogationQuestionWindow) {
                 room.isInterrogationQuestionWindow = false;
-                room.timer = 6; // Now give 6 seconds for defense
-                emitState(room);
+                room.timer = 6;
+                await emitState(room);
               } else {
                 room.interrogationIndex++;
                 if (room.interrogationIndex < room.gossipResults.length) {
-                  startPhase(room, GamePhase.INTERROGATION, 7); // Start next interrogation with 7s popup
+                  await startPhase(room, GamePhase.INTERROGATION, 7);
                 } else {
-                  startPhase(room, GamePhase.VOTING, VOTING_TIMER);
+                  await startPhase(room, GamePhase.VOTING, VOTING_TIMER);
                 }
               }
               break;
             case GamePhase.VOTING:
-              startPhase(room, GamePhase.RESULT, RESULT_TIMER);
+              await startPhase(room, GamePhase.RESULT, RESULT_TIMER);
               break;
             case GamePhase.RESULT:
               if (room.phase as any !== GamePhase.GAME_OVER) {
                 const killerStillAlive = room.players.some(p => p.isAlive && p.role === Role.KILLER);
-                
                 if (killerStillAlive) {
-                   // Todos os sobreviventes vão para a segunda fase de gossip antes da próxima votação
-                   room.roundCount++;
-                   room.questionIndex = 0;
-                   room.interrogationIndex = 0;
-                   room.gossipResults = [];
-                   
-                   // Seleciona 3 questões de Gossip 2
-                   const pool = [...GOSSIP_2_QUESTIONS];
-                   const selected: string[] = [];
-                   for (let i = 0; i < 3; i++) {
-                     if (pool.length === 0) break;
-                     const idx = Math.floor(Math.random() * pool.length);
-                     selected.push(pool.splice(idx, 1)[0]);
-                   }
-                   room.gossipQuestions = selected;
-                   
-                   startPhase(room, GamePhase.GOSSIP_2, GOSSIP_TIMER);
+                  room.roundCount++;
+                  room.questionIndex = 0;
+                  room.interrogationIndex = 0;
+                  room.gossipResults = [];
+
+                  const pool = [...GOSSIP_2_QUESTIONS];
+                  const selected: string[] = [];
+                  for (let i = 0; i < 3; i++) {
+                    if (pool.length === 0) break;
+                    const idx = Math.floor(Math.random() * pool.length);
+                    selected.push(pool.splice(idx, 1)[0]);
+                  }
+                  room.gossipQuestions = selected;
+
+                  await startPhase(room, GamePhase.GOSSIP_2, GOSSIP_TIMER);
                 }
               }
               break;
           }
+          continue;
         }
-        
-        // Emit update every tick to keep timers in sync
-        emitState(room);
-      });
+
+        await emitState(room);
+      }
     } catch (error) {
       console.error("Error in game loop:", error);
     }
   }, 1000);
 
-  // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
