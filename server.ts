@@ -21,25 +21,25 @@ const AVATARS = ['bibs', 'gb', 'lavis', 'lucas', 'mat', 'mel', '🤵', '💃'];
 const ITEMS_POOL = Object.values(Item).filter(i => i !== Item.KNIFE);
 
 const QUESTIONS = [
-  "Quem é o mais provável de ser o assassino?",
-  "Quem está com o sorriso mais suspeito?",
-  "Quem é o mais falante?",
-  "Quem está mais quieto?",
-  "Quem está mais agitado?"
+  "¿Quién es el más probable de ser el asesino?",
+  "¿Quién tiene la sonrisa más sospechosa?",
+  "¿Quién es el más hablador?",
+  "¿Quién está más callado?",
+  "¿Quién está más agitado?"
 ];
 
 const GOSSIP_2_QUESTIONS = [
-  "Quem defendeu mais um suspeito?",
-  "Quem foi que mais argumentou na votação?",
-  "Quem foi o mais calado?",
-  "Quem está agindo de forma suspeita?"
+  "¿Quién defendió más a un sospechoso?",
+  "¿Quién discutió más durante la votación?",
+  "¿Quién fue el más callado?",
+  "¿Quién está actuando de forma sospechosa?"
 ];
 
 const INTERROGATION_QUESTIONS = [
-  "Conte o que Sabes",
-  "Você trocou algum item?",
-  "Você roubou algum item?",
-  "Você incriminou alguém?"
+  "Cuéntanos lo que sabes",
+  "¿Intercambiaste algún objeto?",
+  "¿Robaste algún objeto?",
+  "¿Incriminaste a alguien?"
 ];
 
 async function startServer() {
@@ -142,7 +142,7 @@ async function startServer() {
         botNickname = `${botNames[Math.floor(Math.random() * botNames.length)]} (Bot)`;
       } else {
         // Safe fallback if somehow we run out of names
-        botNickname = `Convidado ${Math.floor(Math.random() * 999)} (Bot)`;
+        botNickname = `Invitado ${Math.floor(Math.random() * 999)} (Bot)`;
       }
       
       const bot: Player = {
@@ -190,7 +190,7 @@ async function startServer() {
       if (!requester?.isHost) return;
       if (room.phase !== GamePhase.LOBBY) return;
       if (room.players.length < 4) {
-        socket.emit("event_message", "Mínimo de 4 jogadores para iniciar!");
+        socket.emit("event_message", "¡Mínimo de 4 jugadores para comenzar!");
         return;
       }
 
@@ -218,7 +218,7 @@ async function startServer() {
         killers.forEach(k => {
           const others = killers.filter(other => other.id !== k.id);
           const partnerNames = others.map(o => o.nickname).join(", ");
-          const msg = `Seu parceiro assassino é: ${partnerNames}. Trabalhem juntos para fugir da mansão!`;
+          const msg = `Tu cómplice asesino es: ${partnerNames}. ¡Trabajad juntos para escapar de la mansión!`;
           k.logs.push(msg);
           // Use 'incriminated' type for a red, urgent notification
           k.notification = { message: msg, type: 'incriminated' };
@@ -287,14 +287,14 @@ async function startServer() {
         
         // Notify both players if they are real
         if (!p1.id.startsWith('bot_')) {
-          const msg = `Seu item foi trocado! Agora você tem: ${p1.item}`;
+          const msg = `¡Tu objeto fue intercambiado! Ahora tienes: ${p1.item}`;
           io.to(p1.id).emit("event_message", msg);
           if (!p1.logs) p1.logs = [];
           p1.logs.push(msg);
           p1.notification = { message: msg, type: 'swapped' };
         }
         if (!p2.id.startsWith('bot_')) {
-          const msg = `Seu item foi trocado! Agora você tem: ${p2.item}`;
+          const msg = `¡Tu objeto fue intercambiado! Ahora tienes: ${p2.item}`;
           io.to(p2.id).emit("event_message", msg);
           if (!p2.logs) p2.logs = [];
           p2.logs.push(msg);
@@ -305,7 +305,7 @@ async function startServer() {
       switch (payload.type) {
         case SecretActionType.SNOOP:
           const resultItem = (target1.hasKnife || target1.item === Item.KNIFE) ? Item.KNIFE : target1.item;
-          const snoopMsg = `Investigação: ${target1.nickname} possui o item ${resultItem}`;
+          const snoopMsg = `Husmeando: ${target1.nickname} tiene el objeto ${resultItem}`;
           socket.emit("event_message", snoopMsg);
           if (!actor.logs) actor.logs = [];
           actor.logs.push(snoopMsg);
@@ -316,12 +316,12 @@ async function startServer() {
           const oldItem = actor.item;
           actor.item = target1.item;
           target1.item = oldItem;
-          const stealMsg = `Você roubou o item de ${target1.nickname}! Agora tem: ${actor.item}`;
+          const stealMsg = `¡Robaste el objeto de ${target1.nickname}! Ahora tienes: ${actor.item}`;
           socket.emit("event_message", stealMsg);
           if (!actor.logs) actor.logs = [];
           actor.logs.push(stealMsg);
           if (!target1.id.startsWith('bot_')) {
-            const stolenMsg = `Seu item foi roubado! Agora você tem: ${target1.item}`;
+            const stolenMsg = `¡Tu objeto fue robado! Ahora tienes: ${target1.item}`;
             io.to(target1.id).emit("event_message", stolenMsg);
             if (!target1.logs) target1.logs = [];
             target1.logs.push(stolenMsg);
@@ -333,18 +333,18 @@ async function startServer() {
           swapItems(actor, target1);
           detail = `swapped with ${target1.nickname}`;
           if (!actor.logs) actor.logs = [];
-          actor.logs.push(`Você trocou de item com ${target1.nickname}`);
+          actor.logs.push(`Intercambiaste tu objeto con ${target1.nickname}`);
           break;
         case SecretActionType.SHUFFLE:
           if (target2) {
             swapItems(target1, target2);
             detail = `shuffled items of ${target1.nickname} and ${target2.nickname}`;
             if (!actor.logs) actor.logs = [];
-            actor.logs.push(`Você embaralhou os itens de ${target1.nickname} e ${target2.nickname}`);
+            actor.logs.push(`Mezclaste los objetos de ${target1.nickname} y ${target2.nickname}`);
           }
           break;
         case SecretActionType.ALIBI:
-          const alibiMsg = `Álibi confirmado: Você e ${target1.nickname} estão seguros.`;
+          const alibiMsg = `Coartada confirmada: Tú y ${target1.nickname} estáis a salvo.`;
           socket.emit("event_message", alibiMsg);
           if (!actor.logs) actor.logs = [];
           actor.logs.push(alibiMsg);
@@ -361,15 +361,15 @@ async function startServer() {
             target1.item = Item.KNIFE; // Passa a ter o item da faca
             // Assassinos mantêm sua faca, então não definimos hasKnife como false
             actor.usedPlantEvidence = true;
-            const plantMsg = `Você incriminou ${target1.nickname}!`;
+            const plantMsg = `¡Incriminaste a ${target1.nickname}!`;
             socket.emit("event_message", plantMsg);
             if (!actor.logs) actor.logs = [];
             actor.logs.push(plantMsg);
             if (!target1.id.startsWith('bot_')) {
-              io.to(target1.id).emit("event_message", "VOCÊ FOI INCRIMINADO!");
+              io.to(target1.id).emit("event_message", "¡HAS SIDO INCRIMINADO!");
               if (!target1.logs) target1.logs = [];
-              target1.logs.push("Alguém plantou evidências contra você!");
-              target1.notification = { message: "Alguém plantou evidências contra você!", type: 'incriminated' };
+              target1.logs.push("¡Alguien plantó pruebas contra ti!");
+              target1.notification = { message: "¡Alguien plantó pruebas contra ti!", type: 'incriminated' };
             }
             detail = `planted evidence on ${target1.nickname}`;
           }
@@ -377,7 +377,7 @@ async function startServer() {
         case SecretActionType.SKIP:
           detail = `chose not to act now`;
           if (!actor.logs) actor.logs = [];
-          actor.logs.push(`Você decidiu não agir neste momento.`);
+          actor.logs.push(`Decidiste no actuar en este momento.`);
           break;
       }
 
@@ -613,7 +613,7 @@ async function startServer() {
 
     const sorted = Object.entries(votes).sort((a, b) => b[1] - a[1]);
     const winnerId = sorted.length > 0 ? sorted[0][0] : null;
-    const winnerName = winnerId ? room.players.find(p => p.id === winnerId)?.nickname || "Ninguém" : "Ninguém";
+    const winnerName = winnerId ? room.players.find(p => p.id === winnerId)?.nickname || "Nadie" : "Nadie";
 
     room.gossipResults.push({
       question: room.currentQuestion!,
@@ -767,7 +767,7 @@ async function startServer() {
       b.item = temp;
       [a, b].forEach(p => {
         if (!p.id.startsWith('bot_')) {
-          const msg = `Seu item foi trocado! Agora você tem: ${p.item}`;
+          const msg = `¡Tu objeto fue intercambiado! Ahora tienes: ${p.item}`;
           io.to(p.id).emit("event_message", msg);
           if (!p.logs) p.logs = [];
           p.logs.push(msg);
@@ -787,7 +787,7 @@ async function startServer() {
         bot.item = target.item;
         target.item = oldItem;
         if (!target.id.startsWith('bot_')) {
-          const stolenMsg = `Seu item foi roubado! Agora você tem: ${target.item}`;
+          const stolenMsg = `¡Tu objeto fue robado! Ahora tienes: ${target.item}`;
           io.to(target.id).emit("event_message", stolenMsg);
           if (!target.logs) target.logs = [];
           target.logs.push(stolenMsg);
@@ -817,10 +817,10 @@ async function startServer() {
           target.item = Item.KNIFE;
           bot.usedPlantEvidence = true;
           if (!target.id.startsWith('bot_')) {
-            io.to(target.id).emit("event_message", "VOCÊ FOI INCRIMINADO!");
+            io.to(target.id).emit("event_message", "¡HAS SIDO INCRIMINADO!");
             if (!target.logs) target.logs = [];
-            target.logs.push("Alguém plantou evidências contra você!");
-            target.notification = { message: "Alguém plantou evidências contra você!", type: 'incriminated' };
+            target.logs.push("¡Alguien plantó pruebas contra ti!");
+            target.notification = { message: "¡Alguien plantó pruebas contra ti!", type: 'incriminated' };
           }
         }
         break;
@@ -836,13 +836,13 @@ async function startServer() {
   }
 
   function triggerRandomEvent(room: GameState) {
-    const events = ["A luz apagou", "Testemunha"];
+    const events = ["Se apagaron las luces", "Testigo"];
     const event = events[Math.floor(Math.random() * events.length)];
-    
+
     let message = "";
 
-    if (event === "A luz apagou") {
-      message = "A luz apagou! Itens foram trocados entre alguns inocentes.";
+    if (event === "Se apagaron las luces") {
+      message = "¡Se apagaron las luces! Los objetos fueron intercambiados entre algunos inocentes.";
       const aliveInnocents = room.players.filter(p => p.isAlive && p.role === Role.INNOCENT);
       if (aliveInnocents.length > 1) {
         // Proper shuffle
@@ -855,7 +855,7 @@ async function startServer() {
         aliveInnocents.forEach((p, i) => {
           p.item = items[i];
           if (!p.logs) p.logs = [];
-          const logMsg = `Luzes apagaram! Seu novo item é: ${p.item}`;
+          const logMsg = `¡Las luces se apagaron! Tu nuevo objeto es: ${p.item}`;
           p.logs.push(logMsg);
           
           if (!p.id.startsWith('bot_')) {
@@ -863,11 +863,11 @@ async function startServer() {
           }
         });
       }
-    } else if (event === "Testemunha") {
+    } else if (event === "Testigo") {
       const innocents = room.players.filter(p => p.role === Role.INNOCENT);
       if (innocents.length > 0) {
         const victim = innocents[Math.floor(Math.random() * innocents.length)];
-        message = `Testemunha: Foi visto que ${victim.nickname} possui o item ${victim.item}`;
+        message = `Testigo: Se ha visto que ${victim.nickname} tiene el objeto ${victim.item}`;
         // Add to everyone's logs
         room.players.forEach(p => {
           if (!p.logs) p.logs = [];
@@ -904,9 +904,9 @@ async function startServer() {
       if (eliminated) {
         eliminated.isAlive = false;
         if (eliminated.role === Role.INNOCENT) {
-          room.eventMessage = "Um inocente foi pego indevidamente";
+          room.eventMessage = "Un inocente fue detenido injustamente";
         } else {
-          room.eventMessage = "Um Assassino foi pego";
+          room.eventMessage = "Un Asesino fue capturado";
         }
       }
     }

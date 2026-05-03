@@ -22,26 +22,26 @@ export enum Role {
 }
 
 export enum Item {
-  KNIFE = 'Faca',
-  GLASSES = 'Óculos',
+  KNIFE = 'Cuchillo',
+  GLASSES = 'Gafas',
   DRINK = 'Bebida',
-  WATCH = 'Relógio',
-  RING = 'Anel',
+  WATCH = 'Reloj',
+  RING = 'Anillo',
   LETTER = 'Carta',
-  PHOTOGRAPH = 'Fotografia',
-  KEY = 'Chave',
-  POCKET_WATCH = 'Relógio de Bolso',
-  CIGARETTE_CASE = 'Porta-Cigarros'
+  PHOTOGRAPH = 'Fotografía',
+  KEY = 'Llave',
+  POCKET_WATCH = 'Reloj de Bolsillo',
+  CIGARETTE_CASE = 'Pitillera'
 }
 
 export enum SecretActionType {
-  SHUFFLE = 'Embaralhar',
-  STEAL = 'Roubar',
-  SNOOP = 'Espiar',
-  SWAP = 'Trocar',
-  ALIBI = 'Álibi',
+  SHUFFLE = 'Barajar',
+  STEAL = 'Robar',
+  SNOOP = 'Husmear',
+  SWAP = 'Intercambiar',
+  ALIBI = 'Coartada',
   PLANT_EVIDENCE = 'Incriminar',
-  SKIP = 'Pular'
+  SKIP = 'Saltar'
 }
 
 export interface Player {

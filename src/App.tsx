@@ -68,8 +68,8 @@ const AVATAR_LABELS: Record<string, string> = {
     lucas: 'Lucas',
     mat: 'Mat',
     mel: 'Mel',
-    '🤵': 'Convidado',
-    '💃': 'Convidada',
+    '🤵': 'Invitado',
+    '💃': 'Invitada',
 };
 
 const AvatarDisplay = ({avatar, className, shape = 'rounded'}: { avatar: string, className?: string, shape?: 'rounded' | 'circle' }) => {
@@ -160,7 +160,7 @@ const NarratorIntro = () => {
                 <div
                     className="font-serif italic text-xl md:text-3xl leading-relaxed text-white/90 min-h-[200px] flex items-center justify-center px-2">
                     <Typewriter
-                        text="Bem-vindos à Mansão Blackwood... Infelizmente, a noite tomou um rumo trágico. Um assassinato ocorreu nos corredores sombrios, e o culpado ainda caminha entre nós. Ninguém sairá até que a verdade seja revelada."
+                        text="Bienvenidos a la Mansión Blackwood... Desgraciadamente, la noche ha tomado un rumbo trágico. Un asesinato ha ocurrido en los oscuros pasillos, y el culpable aún camina entre nosotros. Nadie saldrá hasta que se revele la verdad."
                         delay={50}
                         onDone={handleDone}
                     />
@@ -173,7 +173,7 @@ const NarratorIntro = () => {
                         transition={{duration: 0.6}}
                         className="mt-8 md:mt-12 text-xs md:text-sm uppercase tracking-[0.4em] font-bold text-red-500 animate-pulse"
                     >
-                        Preparem-se
+                        Preparaos
                     </motion.div>
                 )}
             </MansionCard>
@@ -201,7 +201,7 @@ const RandomEventPopup = ({message}: { message: string }) => {
                 >
                     <Skull className="w-16 h-16 mx-auto text-red-500"/>
                 </motion.div>
-                <MansionLabel className="text-red-400 text-sm tracking-[0.5em] mb-4">EVENTO INESPERADO</MansionLabel>
+                <MansionLabel className="text-red-400 text-sm tracking-[0.5em] mb-4">SUCESO IMPREVISTO</MansionLabel>
                 <h2 className="text-2xl md:text-3xl font-serif italic text-red-50">{message}</h2>
                 <div className="mt-8 flex justify-center">
                     <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
@@ -229,14 +229,14 @@ const InterrogationQuestionPopup = ({question, timer}: { question: string, timer
             <MansionCard
                 className="w-full max-w-lg border-white/20 bg-black/40 p-8 md:p-12 text-center shadow-[0_0_100px_rgba(255,255,255,0.1)]">
                 <MansionLabel className="mb-6 tracking-[0.5em] text-white/40 block">BENOÎT BLANC
-                    PERGUNTA:</MansionLabel>
+                    PREGUNTA:</MansionLabel>
                 <h2 className="text-3xl md:text-5xl font-serif italic text-white leading-tight min-h-[160px] flex items-center justify-center">
                     "{question}"
                 </h2>
                 <div className="mt-8 flex flex-col items-center gap-4">
                     <div className="w-24 h-0.5 bg-white/20 mb-4"/>
-                    <p className="text-xs text-white/40 uppercase tracking-widest font-bold">Defesa inicia
-                        em {timer}s...</p>
+                    <p className="text-xs text-white/40 uppercase tracking-widest font-bold">La defensa comienza
+                        en {timer}s...</p>
                 </div>
             </MansionCard>
         </motion.div>
@@ -258,9 +258,9 @@ const TransitionView = ({timer}: { timer: number }) => {
                 transition={{duration: 1, ease: "easeOut"}}
                 className="text-center px-6"
             >
-                <MansionLabel className="mb-4 tracking-[0.6em] md:tracking-[1em] text-white/40 block">MOMENTO DO
-                    CRIME</MansionLabel>
-                <h2 className="text-4xl md:text-7xl font-serif italic text-white mb-4">Investigue com Cuidado...</h2>
+                <MansionLabel className="mb-4 tracking-[0.6em] md:tracking-[1em] text-white/40 block">MOMENTO DEL
+                    CRIMEN</MansionLabel>
+                <h2 className="text-4xl md:text-7xl font-serif italic text-white mb-4">Investiga con Cuidado...</h2>
                 <div className="flex items-center justify-center gap-4 mt-12">
                     <motion.div
                         animate={{scaleX: [0, 1]}}
@@ -271,7 +271,7 @@ const TransitionView = ({timer}: { timer: number }) => {
             </motion.div>
 
             <p className="text-xs text-red-500/50 uppercase font-black tracking-[0.4em] animate-pulse">
-                O mistério se revela em {timer}s
+                El misterio se revela en {timer}s
             </p>
         </motion.div>
     );
@@ -301,14 +301,14 @@ const NotificationPopup = ({notification}: { notification: { message: string, ty
                     {icons[notification.type as keyof typeof icons] || <Skull className="w-12 h-12 "/>}
                 </motion.div>
                 <MansionLabel className="mb-4 text-xs font-black tracking-[0.4em] text-white/40">ALERTA DE
-                    SEGURANÇA</MansionLabel>
+                    SEGURIDAD</MansionLabel>
                 <h2 className="text-2xl font-serif italic text-white mb-8">{notification.message}</h2>
                 <MansionButton
                     onClick={() => socket.emit('clear_notification')}
                     className="w-full"
                     variant="secondary"
                 >
-                    MAIS CUIDADO NA PRÓXIMA
+                    MÁS CUIDADO LA PRÓXIMA VEZ
                 </MansionButton>
             </MansionCard>
         </motion.div>
@@ -384,7 +384,7 @@ export default function App() {
 
     const handleCreateRoom = () => {
         if (!nickname) {
-            setError("Por favor, digite um nickname");
+            setError("Por favor, introduce un nombre");
             return;
         }
         socket.emit('create_room', {nickname, avatar: selectedAvatar});
@@ -392,7 +392,7 @@ export default function App() {
 
     const handleJoinRoom = () => {
         if (!nickname || !roomIdInput) {
-            setError("Digite seu nickname e o código da sala");
+            setError("Introduce tu nombre y el código de la sala");
             return;
         }
         socket.emit('join_room', {roomId: roomIdInput, nickname, avatar: selectedAvatar});
@@ -471,23 +471,23 @@ export default function App() {
                             DEAD MAN'S PARTY
                         </h1>
                         <p className="mt-3 text-[10px] sm:text-xs uppercase tracking-[0.5em] text-white/40 font-bold">
-                            Um mistério em sociedade
+                            Un misterio en sociedad
                         </p>
                     </div>
 
                     <MansionCard className="p-6 sm:p-10 backdrop-blur-xl bg-black/60 border-white/10 shadow-[0_0_60px_rgba(0,0,0,0.6)]">
                         <div className="space-y-8">
                             <div>
-                                <MansionLabel>Seu Nome</MansionLabel>
+                                <MansionLabel>Tu Nombre</MansionLabel>
                                 <MansionInput
                                     value={nickname}
                                     onChange={setNickname}
-                                    placeholder="Ex: Benoit Blanc"
+                                    placeholder="Ej: Benoit Blanc"
                                 />
                             </div>
 
                             <div>
-                                <MansionLabel>Escolha seu Personagem</MansionLabel>
+                                <MansionLabel>Elige tu Personaje</MansionLabel>
                                 <div className="grid grid-cols-4 gap-3 sm:gap-4">
                                     {AVATARS.map(a => {
                                         const isTaken = gameState?.players.some(p => p.avatar === a);
@@ -525,7 +525,7 @@ export default function App() {
                                                 </div>
                                                 {isTaken && (
                                                     <span className="absolute top-2 right-2 text-[8px] uppercase tracking-wider bg-black/80 text-white/60 px-1.5 py-0.5 rounded">
-                                                        Em uso
+                                                        En uso
                                                     </span>
                                                 )}
                                             </motion.button>
@@ -536,7 +536,7 @@ export default function App() {
 
                             <div className="space-y-3 pt-2">
                                 <MansionButton onClick={handleCreateRoom} className="w-full py-4 text-base">
-                                    Criar Nova Sala
+                                    Crear Nueva Sala
                                 </MansionButton>
 
                                 <div className="flex items-center gap-3 my-4">
@@ -605,7 +605,7 @@ export default function App() {
                             </div>
                         </div>
                         <div className="flex flex-col items-end gap-1">
-                            <MansionLabel>Convidados</MansionLabel>
+                            <MansionLabel>Invitados</MansionLabel>
                             <div className="flex items-center gap-2">
                                 <Users className="w-5 h-5 text-white/40" />
                                 <span className="text-2xl font-mono">
@@ -662,7 +662,7 @@ export default function App() {
                                         <Users className="w-5 h-5 text-white/20" />
                                     </div>
                                     <span className="text-[9px] uppercase tracking-[0.2em] text-white/25 font-bold italic">
-                                        Aguardando...
+                                        Esperando...
                                     </span>
                                 </div>
                             ))}
@@ -676,15 +676,15 @@ export default function App() {
                                     disabled={gameState.players.length < 4}
                                 >
                                     {gameState.players.length < 4
-                                        ? `Aguardando mais ${4 - gameState.players.length} convidado(s)`
-                                        : 'Iniciar Mistério'}
+                                        ? `Esperando ${4 - gameState.players.length} invitado(s) más`
+                                        : 'Iniciar Misterio'}
                                 </MansionButton>
                                 <MansionButton
                                     onClick={() => socket.emit('add_bot')}
                                     variant="secondary"
                                     className="w-full text-[10px]"
                                 >
-                                    + Adicionar Bot (Teste)
+                                    + Añadir Bot (Prueba)
                                 </MansionButton>
                             </div>
                         )}
@@ -693,7 +693,7 @@ export default function App() {
                             <div className="flex items-center justify-center gap-3 mt-4">
                                 <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                                 <p className="text-center text-white/50 text-xs italic">
-                                    Aguardando o Host iniciar...
+                                    Esperando al Anfitrión para comenzar...
                                 </p>
                             </div>
                         )}
@@ -736,14 +736,14 @@ export default function App() {
             {/* Header Info */}
             <div className="w-full max-w-4xl flex justify-between items-start mb-8">
                 <div className="flex flex-col gap-1">
-                    <MansionLabel>Fase Atual</MansionLabel>
+                    <MansionLabel>Fase Actual</MansionLabel>
                     <div className="flex items-center gap-2">
                         <h2 className="text-xl font-serif uppercase tracking-wider">{gameState.phase}</h2>
-                        <MansionBadge>Rodada {gameState.roundCount}</MansionBadge>
+                        <MansionBadge>Ronda {gameState.roundCount}</MansionBadge>
                     </div>
                 </div>
                 <div className="flex flex-col items-end gap-1">
-                    <MansionLabel>Tempo</MansionLabel>
+                    <MansionLabel>Tiempo</MansionLabel>
                     <div className="flex items-center gap-2 text-2xl font-mono">
                         <Timer className="w-5 h-5 text-white/40"/>
                         {Math.floor(Math.max(0, gameState.timer) / 60)}:{(Math.max(0, gameState.timer) % 60).toString().padStart(2, '0')}
@@ -788,26 +788,26 @@ export default function App() {
                         <MansionCard className="text-center py-12">
                             {!me?.roleRevealed ? (
                                 <div className="space-y-6">
-                                    <MansionLabel>O Mistério Começa</MansionLabel>
-                                    <h1 className="text-2xl sm:text-4xl font-serif mb-8">Investigue sua
-                                        identidade...</h1>
+                                    <MansionLabel>El Misterio Comienza</MansionLabel>
+                                    <h1 className="text-2xl sm:text-4xl font-serif mb-8">Investiga tu
+                                        identidad...</h1>
                                     <MansionButton onClick={handleRevealRole} className="w-full py-8 text-xl">
                                         REVELAR PAPEL
                                     </MansionButton>
                                 </div>
                             ) : (
                                 <motion.div initial={{opacity: 0, y: 10}} animate={{opacity: 1, y: 0}}>
-                                    <MansionLabel>Seu Papel</MansionLabel>
+                                    <MansionLabel>Tu Papel</MansionLabel>
                                     <h1 className={cn(
                                         "text-3xl sm:text-5xl font-serif mb-4",
                                         me?.role === Role.KILLER ? "text-red-500" : "text-blue-400"
                                     )}>
-                                        {me?.role === Role.KILLER ? 'ASSASSINO' : 'INOCENTE'}
+                                        {me?.role === Role.KILLER ? 'ASESINO' : 'INOCENTE'}
                                     </h1>
 
                                     {me?.role === Role.KILLER && killers.length > 1 && (
                                         <div className="mb-6 p-4 bg-red-950/20 border border-red-500/20 rounded-2xl">
-                                            <MansionLabel>Seu Cúmplice</MansionLabel>
+                                            <MansionLabel>Tu Cómplice</MansionLabel>
                                             <div className="flex items-center justify-center gap-2">
                                                 {killers.filter(k => k.id !== socket.id).map(k => (
                                                     <span key={k.id}
@@ -819,7 +819,7 @@ export default function App() {
 
                                     <div
                                         className="bg-white/5 py-8 px-4 rounded-3xl border border-white/10 inline-block mb-6 min-w-[200px]">
-                                        <MansionLabel>Seus Itens</MansionLabel>
+                                        <MansionLabel>Tus Objetos</MansionLabel>
                                         <div className="flex flex-col items-center gap-6 mt-4">
                                             {me?.hasKnife && (
                                                 <div className="flex flex-col items-center gap-2">
@@ -827,7 +827,7 @@ export default function App() {
                                                     <span
                                                         className="text-2xl font-serif text-red-100">{Item.KNIFE}</span>
                                                     <span
-                                                        className="text-[10px] uppercase font-bold text-red-500/50 -mt-2">Arma do Crime</span>
+                                                        className="text-[10px] uppercase font-bold text-red-500/50 -mt-2">Arma del Crimen</span>
                                                 </div>
                                             )}
                                             <div className="flex flex-col items-center gap-2">
@@ -837,15 +837,15 @@ export default function App() {
                                                     me?.hasKnife ? "text-sm text-white/50" : ""
                                                 )}>{me?.item}</span>
                                                 {me?.hasKnife && <span
-                                                    className="text-[10px] uppercase font-bold text-white/20 -mt-2">Disfarce</span>}
+                                                    className="text-[10px] uppercase font-bold text-white/20 -mt-2">Disfraz</span>}
                                             </div>
                                         </div>
                                     </div>
 
                                     {me?.logs && me.logs.length > 0 && (
                                         <div className="mb-6 text-left max-w-xs mx-auto space-y-2">
-                                            <MansionLabel className="text-[10px] opacity-40">Informações
-                                                Coletadas</MansionLabel>
+                                            <MansionLabel className="text-[10px] opacity-40">Información
+                                                Recopilada</MansionLabel>
                                             <div className="space-y-1">
                                                 {me.logs.map((l, i) => (
                                                     <p key={i} className="text-xs italic text-white/60">• {l}</p>
@@ -855,7 +855,7 @@ export default function App() {
                                     )}
 
                                     <p className="text-sm text-white/50 px-8 italic">
-                                        Aguardando os outros convidados...
+                                        Esperando a los demás invitados...
                                     </p>
                                 </motion.div>
                             )}
@@ -887,14 +887,14 @@ export default function App() {
                                         </div>
                                         <MansionBadge
                                             className="bg-white/5 border-white/10 text-white/40 uppercase tracking-tighter text-[9px] font-bold">
-                                            {gameState.phase === GamePhase.GOSSIP_2 ? "Fase de Gossip 2" : "Fase de Gossip"}
+                                            {gameState.phase === GamePhase.GOSSIP_2 ? "Fase de Rumores 2" : "Fase de Rumores"}
                                         </MansionBadge>
                                         <MansionBadge className="bg-white/5 border-white/10 text-white/40">
-                                            {gameState.timer > 60 ? "Votação em Andamento" : `${gameState.timer}s`}
+                                            {gameState.timer > 60 ? "Votación en Curso" : `${gameState.timer}s`}
                                         </MansionBadge>
                                     </div>
 
-                                    <MansionLabel>Pergunta do Momento</MansionLabel>
+                                    <MansionLabel>Pregunta del Momento</MansionLabel>
                                     <motion.div
                                         key={gameState.questionIndex}
                                         initial={{opacity: 0, y: 10}}
@@ -952,7 +952,7 @@ export default function App() {
                                 {gameState.eventMessage && !gameState.activePopup && (
                                     <motion.div initial={{height: 0}} animate={{height: 'auto'}} className="mt-6">
                                         <MansionCard className="bg-red-950/20 border-red-500/30">
-                                            <MansionLabel className="text-red-400">Log de Evento</MansionLabel>
+                                            <MansionLabel className="text-red-400">Registro de Evento</MansionLabel>
                                             <p className="text-lg font-serif italic text-red-200">{gameState.eventMessage}</p>
                                         </MansionCard>
                                     </motion.div>
@@ -974,7 +974,7 @@ export default function App() {
                                     <div
                                         className="absolute top-4 left-0 w-full px-4 flex justify-between items-center">
                                         <MansionBadge className="bg-red-500 text-white border-none animate-pulse">Momento
-                                            do Crime</MansionBadge>
+                                            del Crimen</MansionBadge>
                                         <span
                                             className="text-xs font-mono text-red-500 font-bold">{gameState.timer}s</span>
                                     </div>
@@ -986,8 +986,8 @@ export default function App() {
                                                             className="space-y-4">
                                                     <MansionLabel className="text-white animate-pulse">
                                                         {actionTargeting.type === SecretActionType.SHUFFLE && actionTargeting.firstTargetId
-                                                            ? "Escolha o Segundo Alvo"
-                                                            : `Selecione um Alvo para ${actionTargeting.type}`}
+                                                            ? "Elige el Segundo Objetivo"
+                                                            : `Selecciona un Objetivo para ${actionTargeting.type}`}
                                                     </MansionLabel>
                                                     <div className="grid grid-cols-2 gap-2">
                                                         {gameState.players.filter(p => p.isAlive && p.id !== socket.id && p.id !== actionTargeting.firstTargetId).map(p => (
@@ -1016,7 +1016,7 @@ export default function App() {
                                                     >
                                                         <MansionLabel
                                                             className="mb-2 block italic text-red-400 font-bold">
-                                                            SUA VEZ DE AGIR:
+                                                            ES TU TURNO DE ACTUAR:
                                                         </MansionLabel>
                                                     </motion.div>
 
@@ -1047,7 +1047,7 @@ export default function App() {
                                                         variant="secondary"
                                                         className="w-full max-w-[240px] text-[10px] py-4 mt-4"
                                                     >
-                                                        {me.assignedSecretAction === SecretActionType.PLANT_EVIDENCE ? "NÃO INCRIMINAR AGORA" : "PULAR AÇÃO"}
+                                                        {me.assignedSecretAction === SecretActionType.PLANT_EVIDENCE ? "NO INCRIMINAR AHORA" : "SALTAR ACCIÓN"}
                                                     </MansionButton>
 
                                                     <motion.p
@@ -1055,7 +1055,7 @@ export default function App() {
                                                         animate={{opacity: 1}}
                                                         className="text-[10px] text-red-400 font-black tracking-widest uppercase animate-bounce"
                                                     >
-                                                        Use agora!
+                                                        ¡Úsalo ahora!
                                                     </motion.p>
                                                 </div>
                                             )}
@@ -1064,7 +1064,7 @@ export default function App() {
                                         <div className="opacity-40 space-y-4">
                                             <Users className="w-16 h-16 mx-auto text-red-500 opacity-20"/>
                                             <p className="font-serif italic px-6">
-                                                Outros convidados estão realizando ações suspeitas...
+                                                Otros invitados están realizando acciones sospechosas...
                                             </p>
                                         </div>
                                     )}
@@ -1072,10 +1072,10 @@ export default function App() {
                                     {snoopResult && (
                                         <motion.div initial={{opacity: 0, y: 10}} animate={{opacity: 1, y: 0}}
                                                     className="mt-8 p-4 bg-white/10 rounded-2xl border border-white/20 w-full">
-                                            <MansionLabel>Espionagem</MansionLabel>
+                                            <MansionLabel>Espionaje</MansionLabel>
                                             <p className="text-sm">
-                                                {gameState.players.find(p => p.id === snoopResult.targetId)?.nickname} tem
-                                                o item {snoopResult.item}
+                                                {gameState.players.find(p => p.id === snoopResult.targetId)?.nickname} tiene
+                                                el objeto {snoopResult.item}
                                             </p>
                                         </motion.div>
                                     )}
@@ -1096,9 +1096,9 @@ export default function App() {
                         </AnimatePresence>
 
                         <div className="text-center mb-12">
-                            <MansionLabel>Confronto de Fofocas</MansionLabel>
-                            <h1 className="text-2xl sm:text-4xl font-serif">O Interrogatório</h1>
-                            <p className="mt-2 text-white/50 italic font-medium">Suspeito {gameState.interrogationIndex + 1} de {gameState.gossipResults.length}</p>
+                            <MansionLabel>Confrontación de Rumores</MansionLabel>
+                            <h1 className="text-2xl sm:text-4xl font-serif">El Interrogatorio</h1>
+                            <p className="mt-2 text-white/50 italic font-medium">Sospechoso {gameState.interrogationIndex + 1} de {gameState.gossipResults.length}</p>
                         </div>
 
                         <div className="max-w-xl mx-auto mb-12">
@@ -1118,15 +1118,15 @@ export default function App() {
                                                 animate={{opacity: 1, scale: 1}}
                                                 className="mb-8 p-4 bg-white/10 rounded-2xl border border-white/20"
                                             >
-                                                <MansionLabel className="text-white/60 mb-2 block">PERGUNTA PARA O
-                                                    SUSPEITO</MansionLabel>
+                                                <MansionLabel className="text-white/60 mb-2 block">PREGUNTA PARA EL
+                                                    SOSPECHOSO</MansionLabel>
                                                 <p className="text-xl font-serif italic text-white font-bold">"{gameState.interrogationQuestion}"</p>
                                             </motion.div>
                                         )}
 
                                         <MansionLabel
                                             className={gameState.gossipResults[gameState.interrogationIndex].mostVotedId === socket.id ? "text-red-400" : ""}>
-                                            A Acusação Popular
+                                            La Acusación Popular
                                         </MansionLabel>
                                         <h3 className="text-2xl font-serif leading-relaxed italic mb-10 mt-6 px-4">
                                             "{gameState.gossipResults[gameState.interrogationIndex].question}"
@@ -1136,8 +1136,8 @@ export default function App() {
                                             "p-8 rounded-3xl inline-block min-w-[240px] border",
                                             gameState.gossipResults[gameState.interrogationIndex].mostVotedId === socket.id ? "bg-red-500/20 border-red-500/30" : "bg-white/10 border-white/10"
                                         )}>
-                                            <p className="text-[10px] uppercase font-black tracking-[0.4em] mb-3 opacity-60">O
-                                                Principal Suspeito</p>
+                                            <p className="text-[10px] uppercase font-black tracking-[0.4em] mb-3 opacity-60">El
+                                                Principal Sospechoso</p>
                                             <div className="flex items-center justify-center gap-3">
                                                 <AvatarDisplay
                                                     avatar={gameState.players.find(p => p.id === gameState.gossipResults[gameState.interrogationIndex].mostVotedId)?.avatar || '🤵'}
@@ -1153,8 +1153,8 @@ export default function App() {
                                             <Timer className="w-8 h-8 text-white/20 animate-pulse"/>
                                             <p className="text-xs text-white/40 uppercase tracking-widest font-bold">
                                                 {gameState.isInterrogationQuestionWindow
-                                                    ? `Iniciando em ${gameState.timer}s...`
-                                                    : `Defenda-se: ${gameState.timer}s`}
+                                                    ? `Empezando en ${gameState.timer}s...`
+                                                    : `Defiéndete: ${gameState.timer}s`}
                                             </p>
 
                                             {!gameState.isInterrogationQuestionWindow && (
@@ -1166,8 +1166,8 @@ export default function App() {
                                                         className={cn("w-full text-[10px] transition-all", (me?.isReadyToSkip || socket.id !== gameState.gossipResults[gameState.interrogationIndex]?.mostVotedId) && "opacity-50")}
                                                     >
                                                         {socket.id !== gameState.gossipResults[gameState.interrogationIndex]?.mostVotedId
-                                                            ? "AGUARDANDO DEFESA"
-                                                            : me?.isReadyToSkip ? "Aguardando outros..." : "JÁ FALEI TUDO"}
+                                                            ? "ESPERANDO DEFENSA"
+                                                            : me?.isReadyToSkip ? "Esperando a los demás..." : "YA DIJE TODO"}
                                                         {me?.isReadyToSkip && <span
                                                             className="ml-2 inline-block w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin"/>}
                                                     </MansionButton>
@@ -1182,11 +1182,11 @@ export default function App() {
                         <MansionCard
                             className="p-8 text-center bg-black/20 border-white/5 backdrop-blur-sm max-w-2xl mx-auto">
                             <MessageSquare className="w-10 h-10 mx-auto mb-4 opacity-20"/>
-                            <h3 className="text-xl font-serif mb-2 text-white/80">O Convite para a Explicação</h3>
+                            <h3 className="text-xl font-serif mb-2 text-white/80">La Invitación a Explicarse</h3>
                             <p className="text-xs text-white/40 italic leading-relaxed">
-                                Benoît Blanc exige saber: Você realizou ações? Viu algo suspeito? Alguém roubou seu
-                                item? <br/>
-                                O sussurro da mansão é implacável.
+                                Benoît Blanc exige saber: ¿Realizaste acciones? ¿Viste algo sospechoso? ¿Alguien robó tu
+                                objeto? <br/>
+                                El susurro de la mansión es implacable.
                             </p>
                         </MansionCard>
                     </motion.div>
@@ -1197,8 +1197,8 @@ export default function App() {
                     <motion.div key="voting" className="w-full max-w-2xl py-12 pb-40">
                         <MansionCard className="p-8">
                             <div className="text-center mb-12">
-                                <MansionLabel>Momento da Acusação</MansionLabel>
-                                <h2 className="text-3xl font-serif">A quem você confia as algemas?</h2>
+                                <MansionLabel>Momento de la Acusación</MansionLabel>
+                                <h2 className="text-3xl font-serif">¿A quién señalas como culpable?</h2>
                             </div>
 
                             <div className="space-y-3 mb-8">
@@ -1231,7 +1231,7 @@ export default function App() {
                                                             variant="secondary"
                                                             className="bg-black/80 text-white px-6 py-3 flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-widest border-2 border-white/20 hover:bg-black"
                                                         >
-                                                            <Lock className="w-4 h-4"/> TRAVAR
+                                                            <Lock className="w-4 h-4"/> FIJAR
                                                         </MansionButton>
                                                     )}
                                                 </div>
@@ -1258,10 +1258,10 @@ export default function App() {
 
                             <p className="text-center text-xs text-white/30 italic">
                                 {!me?.isAlive
-                                    ? "Você está preso. Apenas assista à justiça ser feita."
+                                    ? "Estás detenido. Solo observa cómo se hace justicia."
                                     : me?.hasLockedVote
-                                        ? "Voto selado. O veredito se aproxima."
-                                        : "Escolha um suspeito e use o cadeado para travar sua decisão."}
+                                        ? "Voto sellado. El veredicto se acerca."
+                                        : "Elige a un sospechoso y usa el candado para fijar tu decisión."}
                             </p>
                         </MansionCard>
                     </motion.div>
@@ -1272,15 +1272,15 @@ export default function App() {
                     <motion.div key="result" className="w-full max-w-md text-center py-12">
                         <MansionCard className="py-12 border-t-4 border-white shadow-2xl">
                             <Skull className="w-16 h-16 mx-auto mb-6 text-white/20"/>
-                            <MansionLabel>O Sistema Escolheu</MansionLabel>
+                            <MansionLabel>El Sistema Ha Decidido</MansionLabel>
                             <h2 className="text-2xl sm:text-4xl font-serif mb-6 leading-tight">
-                                {gameState.eventMessage || "Investigação Concluída"}
+                                {gameState.eventMessage || "Investigación Concluida"}
                             </h2>
                             <div className="bg-white/5 p-6 rounded-2xl border border-white/10 mb-8 max-w-xs mx-auto">
                                 <p className="text-white/60 italic text-sm">
                                     {gameState.players.find(p => !p.isAlive && gameState.phase === GamePhase.RESULT)
-                                        ? `${gameState.players.find(p => !p.isAlive && gameState.phase === GamePhase.RESULT)?.nickname} foi detido.`
-                                        : "Ninguém foi punido nesta rodada."}
+                                        ? `${gameState.players.find(p => !p.isAlive && gameState.phase === GamePhase.RESULT)?.nickname} fue detenido.`
+                                        : "Nadie fue castigado en esta ronda."}
                                 </p>
                             </div>
                             <p className="text-xs text-white/30 uppercase tracking-[0.3em] font-extrabold animate-pulse">
@@ -1299,17 +1299,17 @@ export default function App() {
                                     "w-20 h-20 mx-auto mb-4",
                                     gameState.winner === Role.INNOCENT ? "text-blue-400" : "text-red-500 shadow-[0_0_50px_rgba(239,68,68,0.3)]"
                                 )}/>
-                                <MansionLabel>Fim de Jogo</MansionLabel>
+                                <MansionLabel>Fin del Juego</MansionLabel>
                                 <h2 className={cn(
                                     "text-3xl sm:text-5xl font-serif tracking-tight",
                                     gameState.winner === Role.INNOCENT ? "text-blue-400" : "text-red-500"
                                 )}>
-                                    A VITÓRIA É DOS {gameState.winner === Role.INNOCENT ? 'INOCENTES' : 'ASSASSINOS'}
+                                    LA VICTORIA ES DE LOS {gameState.winner === Role.INNOCENT ? 'INOCENTES' : 'ASESINOS'}
                                 </h2>
                             </div>
 
                             <div className="space-y-4 mb-8">
-                                <MansionLabel>Papéis Revelados</MansionLabel>
+                                <MansionLabel>Papeles Revelados</MansionLabel>
                                 <div className="space-y-2">
                                     {gameState.players.map(p => (
                                         <div key={p.id}
@@ -1330,7 +1330,7 @@ export default function App() {
                             </div>
 
                             <MansionButton onClick={() => window.location.reload()} className="w-full">
-                                Jogar Novamente
+                                Jugar de Nuevo
                             </MansionButton>
                         </MansionCard>
                     </motion.div>
@@ -1348,8 +1348,8 @@ export default function App() {
                                 animate={{opacity: 1, y: 0}}
                                 className="bg-black/95 border border-white/10 rounded-2xl p-3 backdrop-blur-xl pointer-events-auto max-h-32 overflow-y-auto scrollbar-hide shadow-2xl"
                             >
-                                <MansionLabel className="text-[9px] mb-1 opacity-50">Inteligência
-                                    Coletada</MansionLabel>
+                                <MansionLabel className="text-[9px] mb-1 opacity-50">Inteligencia
+                                    Recopilada</MansionLabel>
                                 <div className="space-y-1">
                                     {me.logs.map((log, i) => (
                                         <p key={i} className="text-[10px] text-white/80 italic leading-tight">
@@ -1365,7 +1365,7 @@ export default function App() {
                                 <AvatarDisplay avatar={me.avatar}
                                                className="w-10 h-10 flex items-center justify-center text-2xl"/>
                                 <div className="flex flex-col">
-                                    <span className="text-[10px] text-white/50 uppercase font-bold tracking-tighter">Sua Identidade</span>
+                                    <span className="text-[10px] text-white/50 uppercase font-bold tracking-tighter">Tu Identidad</span>
                                     <span className="text-sm font-serif flex items-center gap-2">
                        {me.roleRevealed ? (
                            <>
@@ -1380,7 +1380,7 @@ export default function App() {
                                )}
                            </>
                        ) : (
-                           <span className="text-white/40 italic">Desconhecido</span>
+                           <span className="text-white/40 italic">Desconocido</span>
                        )}
                      </span>
                                 </div>
@@ -1399,7 +1399,7 @@ export default function App() {
                                             className="py-1 px-3 text-[8px]"
                                             variant="secondary"
                                         >
-                                            {me.itemExposed ? "OCULTAR" : "VER ITEM"}
+                                            {me.itemExposed ? "OCULTAR" : "VER OBJETO"}
                                         </MansionButton>
                                     </>
                                 ) : (
