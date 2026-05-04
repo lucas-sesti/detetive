@@ -419,6 +419,7 @@ export default function App() {
         firstTargetId?: string
     } | null>(null);
     const roomIdRef = useRef<string | null>(null);
+    const [roomId, setRoomId] = useState<string | null>(null);
     const playerId = getPlayerId();
 
     const me = useMemo(() => {
@@ -454,21 +455,21 @@ export default function App() {
     };
 
     useEffect(() => {
-        if (!roomIdRef.current) return;
+        if (!roomId) return;
 
         const unsubState = subscribeToRoomState(
-            roomIdRef.current,
+            roomId,
             playerId,
             state => applyState(state),
             () => {}
         );
 
         const unsubMessages = subscribeToMessages(
-            roomIdRef.current,
+            roomId,
             playerId,
             msgs => {
                 handleMessages(msgs);
-                api.clearMessages(roomIdRef.current!, playerId).catch(() => {});
+                api.clearMessages(roomId, playerId).catch(() => {});
             },
             () => {}
         );
@@ -476,7 +477,7 @@ export default function App() {
         let tickInterval: ReturnType<typeof setInterval> | null = null;
         if (isHostRef.current) {
             tickInterval = setInterval(() => {
-                api.tick(roomIdRef.current!).catch(() => {});
+                api.tick(roomId).catch(() => {});
             }, 1000);
         }
 
@@ -485,7 +486,7 @@ export default function App() {
             unsubMessages();
             if (tickInterval) clearInterval(tickInterval);
         };
-    }, [roomIdRef.current]);
+    }, [roomId]);
 
     const action = (type: string, payload?: unknown) => {
         if (!roomIdRef.current) return;
@@ -508,6 +509,7 @@ export default function App() {
             const res = await api.createRoom(nickname, selectedAvatar);
             isHostRef.current = true;
             roomIdRef.current = res.roomId;
+            setRoomId(res.roomId);
         } catch (e: any) { setError(e.message); }
     };
 
@@ -518,6 +520,7 @@ export default function App() {
             const res = await api.joinRoom(roomIdInput, nickname, selectedAvatar);
             isHostRef.current = false;
             roomIdRef.current = res.roomId;
+            setRoomId(res.roomId);
         } catch (e: any) { setError(e.message); }
     };
 
