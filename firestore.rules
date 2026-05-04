@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /rooms/{roomId}/players/{playerId}/state/current {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    match /rooms/{roomId}/messages/{playerId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    match /rooms/{roomId} {
+      allow read, write: if false;
+    }
+  }
+}

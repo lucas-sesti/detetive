@@ -1,14 +1,6 @@
 {
-  "firestore": [
-    {
-      "database": "(default)",
-      "rules": "firestore.rules",
-      "indexes": "firestore.indexes.json"
-    },
-    {
-      "database": "detetive",
-      "rules": "firestore.rules",
-      "indexes": "firestore.indexes.json"
-    }
-  ]
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  }
 }
