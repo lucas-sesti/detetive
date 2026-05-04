@@ -17,8 +17,13 @@ export const db = getFirestore(app, "detetive");
 const auth = getAuth(app);
 
 export async function initAuth(): Promise<void> {
-  if (auth.currentUser) return;
-  await signInAnonymously(auth);
+  if (auth.currentUser) {
+    console.log("[firebase] auth: already signed in uid=", auth.currentUser.uid);
+    return;
+  }
+  console.log("[firebase] auth: signing in anonymously...");
+  const cred = await signInAnonymously(auth);
+  console.log("[firebase] auth: signed in uid=", cred.user.uid);
 }
 
 export function subscribeToRoomState(
@@ -27,10 +32,21 @@ export function subscribeToRoomState(
   onState: (state: GameState) => void,
   onError: (err: Error) => void
 ): () => void {
+  const path = `rooms/${roomId}/players/${playerId}/state/current`;
+  console.log("[firebase] subscribeToRoomState path:", path);
   const ref = doc(db, "rooms", roomId, "players", playerId, "state", "current");
   return onSnapshot(ref, snap => {
-    if (snap.exists()) onState(snap.data() as GameState);
-  }, onError);
+    console.log("[firebase] snapshot received, exists:", snap.exists(), "path:", snap.ref.path);
+    if (snap.exists()) {
+      console.log("[firebase] state phase:", (snap.data() as GameState).phase);
+      onState(snap.data() as GameState);
+    } else {
+      console.warn("[firebase] snapshot exists=false for path:", snap.ref.path);
+    }
+  }, err => {
+    console.error("[firebase] onSnapshot error:", err.code, err.message);
+    onError(err);
+  });
 }
 
 export function subscribeToMessages(
@@ -40,8 +56,13 @@ export function subscribeToMessages(
   onError: (err: Error) => void
 ): () => void {
   const ref = doc(db, "rooms", roomId, "messages", playerId);
+  console.log("[firebase] subscribeToMessages path:", ref.path);
   return onSnapshot(ref, snap => {
+    console.log("[firebase] messages snapshot received, exists:", snap.exists());
     const data = snap.data();
     if (data?.messages?.length) onMessages(data.messages);
-  }, onError);
+  }, err => {
+    console.error("[firebase] messages onSnapshot error:", err.code, err.message);
+    onError(err);
+  });
 }

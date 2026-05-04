@@ -511,7 +511,9 @@ export default function App() {
         if (!nickname) { setError("Por favor, introduce un nombre"); return; }
         try {
             await initAuth();
+            console.log("[app] createRoom: calling API...");
             const res = await api.createRoom(nickname, selectedAvatar);
+            console.log("[app] createRoom: got roomId=", res.roomId, "setting roomId state...");
             isHostRef.current = true;
             roomIdRef.current = res.roomId;
             setWaitingForState(true);
