@@ -459,10 +459,20 @@ export default function App() {
     useEffect(() => {
         if (!roomId) return;
 
+        let tickInterval: ReturnType<typeof setInterval> | null = null;
+
         const unsubState = subscribeToRoomState(
             roomId,
             playerId,
-            state => applyState(state),
+            state => {
+                applyState(state);
+                const amHost = state.players.find(p => p.id === playerId)?.isHost ?? false;
+                if (amHost && !tickInterval) {
+                    tickInterval = setInterval(() => {
+                        api.tick(roomId).catch(() => {});
+                    }, 1000);
+                }
+            },
             () => {}
         );
 
@@ -476,13 +486,6 @@ export default function App() {
             () => {}
         );
 
-        let tickInterval: ReturnType<typeof setInterval> | null = null;
-        if (isHostRef.current) {
-            tickInterval = setInterval(() => {
-                api.tick(roomId).catch(() => {});
-            }, 1000);
-        }
-
         return () => {
             unsubState();
             unsubMessages();
@@ -491,8 +494,8 @@ export default function App() {
     }, [roomId]);
 
     const action = (type: string, payload?: unknown) => {
-        if (!roomIdRef.current) return;
-        api.action(roomIdRef.current, type, payload).catch(() => {});
+        if (!roomId) return;
+        api.action(roomId, type, payload).catch(() => {});
     };
 
     const handleRevealRole = () => action('reveal_role');
