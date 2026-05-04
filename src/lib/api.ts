@@ -1,5 +1,3 @@
-import { GameState, Item } from '../types';
-
 let _playerId: string | null = null;
 
 export function getPlayerId(): string {
@@ -26,22 +24,17 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 
 export const api = {
   createRoom: (nickname: string, avatar: string) =>
-    post<GameState>('/api/create_room', { nickname, avatar }),
+    post<{ ok: boolean; roomId: string }>('/api/create_room', { nickname, avatar }),
 
   joinRoom: (roomId: string, nickname: string, avatar: string) =>
-    post<GameState>('/api/join_room', { roomId, nickname, avatar }),
+    post<{ ok: boolean; roomId: string }>('/api/join_room', { roomId, nickname, avatar }),
 
-  getState: async (roomId: string): Promise<{ state: GameState; messages: { type: string; data: unknown }[] } | null> => {
-    const res = await fetch(`/api/state/${roomId}`, {
-      headers: { 'x-player-id': getPlayerId() },
-    });
-    if (res.status === 404) return null;
-    return res.json();
-  },
-
-  tick: (roomId: string): Promise<{ state: GameState }> =>
+  tick: (roomId: string): Promise<{ ok: boolean }> =>
     post('/api/tick', { roomId }),
 
-  action: (roomId: string, type: string, payload?: unknown): Promise<{ ok: boolean; state: GameState }> =>
+  action: (roomId: string, type: string, payload?: unknown): Promise<{ ok: boolean }> =>
     post('/api/action', { roomId, type, payload }),
+
+  clearMessages: (roomId: string, playerId: string): Promise<{ ok: boolean }> =>
+    post('/api/clear_messages', { roomId, playerId }),
 };
