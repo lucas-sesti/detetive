@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getRoom, saveRoom, deleteRoom, scrubStateFor } from "./_db.js";
+import { getRoom, saveRoom, deleteRoom, saveScrubbedStateForAll, pushMessage } from "./_db.js";
 import { GamePhase, Role, Item, Player, SecretActionType, SecretActionPayload } from "../src/types.js";
 import { AVATARS, ITEMS_POOL, refreshGossipQuestions, startPhase, processGossipQuestion, nextGossipStep, REVEAL_TIMER } from "./_game.js";
 
@@ -30,6 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         canPerformSecretAction: false, isIncriminated: false, roleRevealed: true, itemVisible: false, logs: [],
       });
       await saveRoom(room);
+      await saveScrubbedStateForAll(room);
       break;
     }
 
@@ -38,6 +39,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       me.roleRevealed = true; me.itemVisible = true;
       if (room.players.filter(p => !p.id.startsWith("bot_")).every(p => p.roleRevealed) && room.timer > 5) room.timer = 5;
       await saveRoom(room);
+      await saveScrubbedStateForAll(room);
       break;
     }
 
@@ -63,6 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       room.hasTriggeredRandomEvent = false; room.gossipResults = [];
       refreshGossipQuestions(room);
       await startPhase(room, GamePhase.REVEAL, REVEAL_TIMER);
+      await saveScrubbedStateForAll(room);
       break;
     }
 
@@ -78,6 +81,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const allVoted = room.players.filter(p => !p.id.startsWith("bot_") && p.isAlive).every(p => p.gossipVote);
       if (allVoted && !room.isSecretActionWindow) await processGossipQuestion(room);
       else await saveRoom(room);
+      await saveScrubbedStateForAll(room);
       break;
     }
 
@@ -99,31 +103,83 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       };
 
       switch (p.type) {
-        case SecretActionType.SNOOP: if (t1) { const item = (t1.hasKnife || t1.item === Item.KNIFE) ? Item.KNIFE : t1.item; if (!me.logs) me.logs = []; me.logs.push(`Husmeando: ${t1.nickname} tiene ${item}`); } break;
-        case SecretActionType.STEAL: if (t1) { const old = me.item; me.item = t1.item; t1.item = old; if (!me.logs) me.logs = []; me.logs.push(`¡Robaste el objeto de ${t1.nickname}! Ahora tienes: ${me.item}`); if (!t1.id.startsWith("bot_")) { const msg = `¡Tu objeto fue robado! Ahora tienes: ${t1.item}`; if (!t1.logs) t1.logs = []; t1.logs.push(msg); t1.notification = { message: msg, type: "stolen" }; } } break;
-        case SecretActionType.SWAP: if (t1) { swapItems(me, t1); if (!me.logs) me.logs = []; me.logs.push(`Intercambiaste tu objeto con ${t1.nickname}`); } break;
-        case SecretActionType.SHUFFLE: if (t1 && t2) { swapItems(t1, t2); if (!me.logs) me.logs = []; me.logs.push(`Mezclaste los objetos de ${t1.nickname} y ${t2.nickname}`); } break;
-        case SecretActionType.ALIBI: if (t1) { const a = `Coartada confirmada con ${t1.nickname}.`; const b = `${me.nickname} confirmó una coartada contigo.`; if (!me.logs) me.logs = []; me.logs.push(a); me.notification = { message: a, type: "swapped" }; if (!t1.id.startsWith("bot_")) { if (!t1.logs) t1.logs = []; t1.logs.push(b); t1.notification = { message: b, type: "swapped" }; } } break;
-        case SecretActionType.PLANT_EVIDENCE: if (t1 && me.hasKnife && !me.usedPlantEvidence) { t1.isIncriminated = true; t1.item = Item.KNIFE; me.usedPlantEvidence = true; if (!me.logs) me.logs = []; me.logs.push(`¡Incriminaste a ${t1.nickname}!`); if (!t1.id.startsWith("bot_")) { if (!t1.logs) t1.logs = []; t1.logs.push("¡Alguien plantó pruebas contra ti!"); t1.notification = { message: "¡Alguien plantó pruebas contra ti!", type: "incriminated" }; } } break;
-        case SecretActionType.SKIP: if (me.assignedSecretAction === SecretActionType.PLANT_EVIDENCE) { if (!me.logs) me.logs = []; me.logs.push("Decidiste no actuar en este momento."); } break;
+        case SecretActionType.SNOOP:
+          if (t1) {
+            const item = (t1.hasKnife || t1.item === Item.KNIFE) ? Item.KNIFE : t1.item;
+            if (!me.logs) me.logs = [];
+            me.logs.push(`Husmeando: ${t1.nickname} tiene ${item}`);
+            await pushMessage(room.roomId, playerId, "snoop_result", { targetId: t1.id, item });
+          }
+          break;
+        case SecretActionType.STEAL:
+          if (t1) {
+            const old = me.item; me.item = t1.item; t1.item = old;
+            if (!me.logs) me.logs = []; me.logs.push(`¡Robaste el objeto de ${t1.nickname}! Ahora tienes: ${me.item}`);
+            if (!t1.id.startsWith("bot_")) {
+              const msg = `¡Tu objeto fue robado! Ahora tienes: ${t1.item}`;
+              if (!t1.logs) t1.logs = []; t1.logs.push(msg);
+              t1.notification = { message: msg, type: "stolen" };
+            }
+          }
+          break;
+        case SecretActionType.SWAP:
+          if (t1) { swapItems(me, t1); if (!me.logs) me.logs = []; me.logs.push(`Intercambiaste tu objeto con ${t1.nickname}`); }
+          break;
+        case SecretActionType.SHUFFLE:
+          if (t1 && t2) { swapItems(t1, t2); if (!me.logs) me.logs = []; me.logs.push(`Mezclaste los objetos de ${t1.nickname} y ${t2.nickname}`); }
+          break;
+        case SecretActionType.ALIBI:
+          if (t1) {
+            const a = `Coartada confirmada con ${t1.nickname}.`;
+            const b = `${me.nickname} confirmó una coartada contigo.`;
+            if (!me.logs) me.logs = []; me.logs.push(a);
+            me.notification = { message: a, type: "swapped" };
+            if (!t1.id.startsWith("bot_")) { if (!t1.logs) t1.logs = []; t1.logs.push(b); t1.notification = { message: b, type: "swapped" }; }
+          }
+          break;
+        case SecretActionType.PLANT_EVIDENCE:
+          if (t1 && me.hasKnife && !me.usedPlantEvidence) {
+            t1.isIncriminated = true; t1.item = Item.KNIFE; me.usedPlantEvidence = true;
+            if (!me.logs) me.logs = []; me.logs.push(`¡Incriminaste a ${t1.nickname}!`);
+            if (!t1.id.startsWith("bot_")) {
+              if (!t1.logs) t1.logs = []; t1.logs.push("¡Alguien plantó pruebas contra ti!");
+              t1.notification = { message: "¡Alguien plantó pruebas contra ti!", type: "incriminated" };
+            }
+          }
+          break;
+        case SecretActionType.SKIP:
+          if (me.assignedSecretAction === SecretActionType.PLANT_EVIDENCE) {
+            if (!me.logs) me.logs = []; me.logs.push("Decidiste no actuar en este momento.");
+          }
+          break;
       }
       me.canPerformSecretAction = false;
       await saveRoom(room);
+      await saveScrubbedStateForAll(room);
       break;
     }
 
     case "skip_interrogation": {
       if (!me?.isAlive) break;
       if (room.phase === GamePhase.INTERROGATION) {
-        if (!room.isInterrogationQuestionWindow && playerId === room.gossipResults[room.interrogationIndex]?.mostVotedId) { room.timer = 0; await saveRoom(room); }
+        if (!room.isInterrogationQuestionWindow && playerId === room.gossipResults[room.interrogationIndex]?.mostVotedId) {
+          room.timer = 0; await saveRoom(room); await saveScrubbedStateForAll(room);
+        }
         break;
       }
       me.isReadyToSkip = true;
       const alive1 = room.players.filter(p => !p.id.startsWith("bot_") && p.isAlive);
       if (alive1.every(p => p.isReadyToSkip)) {
         if (room.isSecretActionWindow) await nextGossipStep(room);
-        else { room.players.filter(p => p.id.startsWith("bot_") && p.isAlive && !p.gossipVote).forEach(b => { const o = room.players.filter(x => x.id !== b.id && x.isAlive); if (o.length) b.gossipVote = pick(o).id; }); await processGossipQuestion(room); }
+        else {
+          room.players.filter(p => p.id.startsWith("bot_") && p.isAlive && !p.gossipVote).forEach(b => {
+            const o = room.players.filter(x => x.id !== b.id && x.isAlive);
+            if (o.length) b.gossipVote = pick(o).id;
+          });
+          await processGossipQuestion(room);
+        }
       } else await saveRoom(room);
+      await saveScrubbedStateForAll(room);
       break;
     }
 
@@ -133,19 +189,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const alive2 = room.players.filter(p => !p.id.startsWith("bot_") && p.isAlive);
       if (alive2.every(p => p.isReadyToSkip)) {
         if (room.isSecretActionWindow) await nextGossipStep(room);
-        else { room.players.filter(p => p.id.startsWith("bot_") && p.isAlive && !p.gossipVote).forEach(b => { const o = room.players.filter(x => x.id !== b.id && x.isAlive); if (o.length) b.gossipVote = pick(o).id; }); await processGossipQuestion(room); }
+        else {
+          room.players.filter(p => p.id.startsWith("bot_") && p.isAlive && !p.gossipVote).forEach(b => {
+            const o = room.players.filter(x => x.id !== b.id && x.isAlive);
+            if (o.length) b.gossipVote = pick(o).id;
+          });
+          await processGossipQuestion(room);
+        }
       } else await saveRoom(room);
+      await saveScrubbedStateForAll(room);
       break;
     }
 
-    case "toggle_item_exposure": if (me) { me.itemExposed = !me.itemExposed; await saveRoom(room); } break;
+    case "toggle_item_exposure":
+      if (me) { me.itemExposed = !me.itemExposed; await saveRoom(room); await saveScrubbedStateForAll(room); }
+      break;
 
-    case "clear_notification": if (me) { me.notification = null; await saveRoom(room); } break;
+    case "clear_notification":
+      if (me) { me.notification = null; await saveRoom(room); await saveScrubbedStateForAll(room); }
+      break;
 
     case "vote": {
       if (room.phase !== GamePhase.VOTING || !me?.isAlive || me.hasLockedVote) break;
       const t = payload?.targetId;
-      if (t && t !== playerId) { me.votedFor = t; await saveRoom(room); }
+      if (t && t !== playerId) { me.votedFor = t; await saveRoom(room); await saveScrubbedStateForAll(room); }
       break;
     }
 
@@ -160,6 +227,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
       if (room.players.filter(p => p.isAlive).every(p => p.hasLockedVote)) room.timer = 0;
       await saveRoom(room);
+      await saveScrubbedStateForAll(room);
       break;
     }
 
@@ -171,9 +239,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (newHost) newHost.isHost = true; else { await deleteRoom(room.roomId); res.json({ ok: true }); return; }
       }
       await saveRoom(room);
+      await saveScrubbedStateForAll(room);
       break;
     }
   }
 
-  res.json({ ok: true, state: scrubStateFor(room, playerId) });
+  res.json({ ok: true });
 }
