@@ -58,6 +58,7 @@ export async function startPhase(room: GameState, phase: GamePhase, duration: nu
   room.phase = phase;
   room.timer = duration;
   room.eventMessage = undefined;
+  room.activePopup = undefined;
 
   if (phase === GamePhase.GOSSIP || phase === GamePhase.GOSSIP_2) {
     room.players.forEach(p => {
@@ -211,6 +212,7 @@ function triggerRandomEvent(room: GameState) {
     }
   }
   room.activePopup = { message, type: "event" };
+  room.popupExpiresAt = 5;
 }
 
 export async function runTick(room: GameState): Promise<GameState> {
@@ -239,6 +241,15 @@ export async function runTick(room: GameState): Promise<GameState> {
       }
     });
     if (room.players.filter(p => p.isAlive).every(p => p.hasLockedVote)) room.timer = 0;
+  }
+
+  if (room.activePopup && room.popupExpiresAt !== undefined) {
+    if (room.popupExpiresAt <= 0) {
+      room.activePopup = undefined;
+      room.popupExpiresAt = undefined;
+    } else {
+      room.popupExpiresAt--;
+    }
   }
 
   if (room.timer > 0) { room.timer--; await saveRoom(room); return room; }

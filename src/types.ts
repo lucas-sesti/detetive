@@ -98,6 +98,7 @@ export interface GameState {
     message: string;
     type: "event" | "action";
   } | null;
+  popupExpiresAt?: number;
   isSecretActionWindow?: boolean;
   isInterrogationQuestionWindow?: boolean;
   gossipResults: GossipResult[];
