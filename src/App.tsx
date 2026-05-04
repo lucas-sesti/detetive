@@ -1,5 +1,6 @@
 import React, {useState, useEffect, useRef, useMemo} from 'react';
 import {api, getPlayerId} from './lib/api';
+import { initAuth, subscribeToRoomState, subscribeToMessages } from './lib/firebase';
 import {
     GamePhase,
     Role,
@@ -367,7 +368,7 @@ const TransitionView = ({timer}: { timer: number }) => {
     );
 };
 
-const NotificationPopup = ({notification}: { notification: { message: string, type: string } }) => {
+const NotificationPopup = ({notification, onDismiss}: { notification: { message: string, type: string }, onDismiss: () => void }) => {
     const icons = {
         stolen: <Skull className="w-12 h-12 text-red-500"/>,
         swapped: <Shuffle className="w-12 h-12 text-blue-400"/>,
@@ -394,7 +395,7 @@ const NotificationPopup = ({notification}: { notification: { message: string, ty
                     SEGURIDAD</MansionLabel>
                 <h2 className="text-2xl font-serif italic text-white mb-8">{notification.message}</h2>
                 <MansionButton
-                    onClick={() => gameState && api.action(gameState.roomId, 'clear_notification')}
+                    onClick={onDismiss}
                     className="w-full"
                     variant="secondary"
                 >
@@ -454,25 +455,41 @@ export default function App() {
 
     useEffect(() => {
         if (!roomIdRef.current) return;
-        const interval = setInterval(async () => {
-            try {
-                if (isHostRef.current && roomIdRef.current) {
-                    const res = await api.tick(roomIdRef.current);
-                    if (res) applyState(res.state);
-                } else {
-                    const res = await api.getState(roomIdRef.current!);
-                    if (res) { handleMessages(res.messages ?? []); applyState(res.state); }
-                }
-            } catch {}
-        }, 1000);
-        return () => clearInterval(interval);
+
+        const unsubState = subscribeToRoomState(
+            roomIdRef.current,
+            playerId,
+            state => applyState(state),
+            () => {}
+        );
+
+        const unsubMessages = subscribeToMessages(
+            roomIdRef.current,
+            playerId,
+            msgs => {
+                handleMessages(msgs);
+                api.clearMessages(roomIdRef.current!, playerId).catch(() => {});
+            },
+            () => {}
+        );
+
+        let tickInterval: ReturnType<typeof setInterval> | null = null;
+        if (isHostRef.current) {
+            tickInterval = setInterval(() => {
+                api.tick(roomIdRef.current!).catch(() => {});
+            }, 1000);
+        }
+
+        return () => {
+            unsubState();
+            unsubMessages();
+            if (tickInterval) clearInterval(tickInterval);
+        };
     }, [roomIdRef.current]);
 
     const action = (type: string, payload?: unknown) => {
         if (!roomIdRef.current) return;
-        api.action(roomIdRef.current, type, payload)
-            .then(res => { if (res?.state) applyState(res.state); })
-            .catch(() => {});
+        api.action(roomIdRef.current, type, payload).catch(() => {});
     };
 
     const handleRevealRole = () => action('reveal_role');
@@ -487,20 +504,20 @@ export default function App() {
     const handleCreateRoom = async () => {
         if (!nickname) { setError("Por favor, introduce un nombre"); return; }
         try {
-            const state = await api.createRoom(nickname, selectedAvatar);
-            roomIdRef.current = state.roomId;
+            await initAuth();
+            const res = await api.createRoom(nickname, selectedAvatar);
             isHostRef.current = true;
-            setGameState(state);
+            roomIdRef.current = res.roomId;
         } catch (e: any) { setError(e.message); }
     };
 
     const handleJoinRoom = async () => {
         if (!nickname || !roomIdInput) { setError("Introduce tu nombre y el código de la sala"); return; }
         try {
-            const state = await api.joinRoom(roomIdInput, nickname, selectedAvatar);
-            roomIdRef.current = state.roomId;
+            await initAuth();
+            const res = await api.joinRoom(roomIdInput, nickname, selectedAvatar);
             isHostRef.current = false;
-            setGameState(state);
+            roomIdRef.current = res.roomId;
         } catch (e: any) { setError(e.message); }
     };
 
@@ -834,7 +851,7 @@ export default function App() {
                     <RandomEventPopup message={gameState.activePopup.message}/>
                 )}
                 {me?.notification && (
-                    <NotificationPopup notification={me.notification}/>
+                    <NotificationPopup notification={me.notification} onDismiss={() => action('clear_notification')}/>
                 )}
                 {info && (
                     <motion.div
