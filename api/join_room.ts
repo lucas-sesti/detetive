@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getRoom, saveRoom, scrubStateFor } from "./_db.js";
+import { getRoom, saveRoom, saveScrubbedStateForAll } from "./_db.js";
 import { Player } from "../src/types.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -19,7 +19,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
     room.players.push(player);
     await saveRoom(room);
+    await saveScrubbedStateForAll(room);
   }
 
-  res.json(scrubStateFor(room, playerId));
+  res.json({ ok: true, roomId: room.roomId });
 }
