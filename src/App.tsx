@@ -420,6 +420,7 @@ export default function App() {
     } | null>(null);
     const roomIdRef = useRef<string | null>(null);
     const [roomId, setRoomId] = useState<string | null>(null);
+    const [waitingForState, setWaitingForState] = useState(false);
     const playerId = getPlayerId();
 
     const me = useMemo(() => {
@@ -447,6 +448,7 @@ export default function App() {
     const isHostRef = useRef(false);
 
     const applyState = (next: GameState) => {
+        setWaitingForState(false);
         setGameState(prev => {
             if (prev?.phase !== next.phase) { setSnoopResult(null); setActionTargeting(null); }
             return next;
@@ -509,6 +511,7 @@ export default function App() {
             const res = await api.createRoom(nickname, selectedAvatar);
             isHostRef.current = true;
             roomIdRef.current = res.roomId;
+            setWaitingForState(true);
             setRoomId(res.roomId);
         } catch (e: any) { setError(e.message); }
     };
@@ -520,6 +523,7 @@ export default function App() {
             const res = await api.joinRoom(roomIdInput, nickname, selectedAvatar);
             isHostRef.current = false;
             roomIdRef.current = res.roomId;
+            setWaitingForState(true);
             setRoomId(res.roomId);
         } catch (e: any) { setError(e.message); }
     };
@@ -546,6 +550,21 @@ export default function App() {
             setActionTargeting(null);
         }
     };
+
+    if (waitingForState) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-black">
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex flex-col items-center gap-4"
+                >
+                    <Skull className="w-10 h-10 text-white/20 animate-pulse" />
+                    <p className="text-xs uppercase tracking-[0.4em] text-white/30 font-bold">Entrando a la mansión...</p>
+                </motion.div>
+            </div>
+        );
+    }
 
     if (!gameState) {
         return (
